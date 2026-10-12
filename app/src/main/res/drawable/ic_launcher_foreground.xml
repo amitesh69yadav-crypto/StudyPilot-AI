@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Graduation cap diamond top -->
+    <path
+        android:fillColor="#3B82F6"
+        android:pathData="M54,34 L80,47 L54,60 L28,47 Z" />
+
+    <!-- Cap lower band / skull cap -->
+    <path
+        android:fillColor="#1D4ED8"
+        android:pathData="M37,51.5 L37,63 C37,70 71,70 71,63 L71,51.5 L54,60 Z" />
+
+    <!-- Tassel string and golden bead -->
+    <path
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="2"
+        android:pathData="M54,47 L28,52 L26,67" />
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M24.5,67 A2.5,2.5 0 1,0 27.5,67 A2.5,2.5 0 1,0 24.5,67" />
+
+    <!-- Navigation compass / pilot star emblem at center -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,41 L56.5,46 L61.5,47 L56.5,48 L54,53 L51.5,48 L46.5,47 L51.5,46 Z" />
+
+    <!-- Open book / flight wings foundation beneath -->
+    <path
+        android:fillColor="#60A5FA"
+        android:pathData="M32,71 C43,68 52,71 54,74 C56,71 65,68 76,71 L76,76 C65,73 56,76 54,79 C52,76 43,73 32,76 Z" />
+</vector>
