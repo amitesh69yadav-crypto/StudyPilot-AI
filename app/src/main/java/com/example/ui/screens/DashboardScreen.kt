@@ -82,6 +82,7 @@ fun DashboardScreen(
   val tasks by viewModel.tasks.collectAsState()
   val attempts by viewModel.quizAttempts.collectAsState()
   val scheduleStatus by viewModel.scheduleStatus.collectAsState()
+  val currentUser by viewModel.currentUser.collectAsState()
   val context = LocalContext.current
 
   val averageScore = if (attempts.isNotEmpty()) {
@@ -106,13 +107,14 @@ fun DashboardScreen(
         verticalAlignment = Alignment.CenterVertically
       ) {
         Column {
+          val firstName = currentUser.name.trim().split(" ").firstOrNull() ?: "Scholar"
           Text(
-            text = "Welcome back, Scholar",
+            text = "Welcome back, $firstName",
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onBackground
           )
           Text(
-            text = "University Academic Command Center",
+            text = "${currentUser.university} • Command Center",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )

@@ -32,8 +32,11 @@ import kotlinx.coroutines.launch
 import com.example.data.service.AlarmAndCalendarService
 import com.example.data.service.CurrentScheduleStatus
 import com.example.data.service.ScheduleState
+import com.example.data.model.UserProfile
+import android.content.Context
 
 sealed class Screen(val title: String) {
+  object Login : Screen("Login & Account")
   object Dashboard : Screen("Dashboard")
   object Timetable : Screen("Timetable")
   object MyTopics : Screen("My Topics")
@@ -114,8 +117,206 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
       CurrentScheduleStatus(ScheduleState.FREE_TIME, formattedStatusText = "Checking schedule status...")
     )
 
+  // --- User Authentication & Multi-Device Profile ---
+  private val authPrefs = application.getSharedPreferences("studypilot_auth_prefs", Context.MODE_PRIVATE)
+
+  private val _currentUser = MutableStateFlow<UserProfile>(loadSavedUser())
+  val currentUser: StateFlow<UserProfile> = _currentUser.asStateFlow()
+
+  private val _isAuthenticated = MutableStateFlow(authPrefs.getBoolean("is_logged_in", true))
+  val isAuthenticated: StateFlow<Boolean> = _isAuthenticated.asStateFlow()
+
+  private fun loadSavedUser(): UserProfile {
+    val name = authPrefs.getString("user_name", "Amitesh Yadav") ?: "Amitesh Yadav"
+    val email = authPrefs.getString("user_email", "amitesh69.yadav@gmail.com") ?: "amitesh69.yadav@gmail.com"
+    val role = authPrefs.getString("user_role", "Computer Science Scholar") ?: "Computer Science Scholar"
+    val uni = authPrefs.getString("user_university", "Imperial College London") ?: "Imperial College London"
+    val studentId = authPrefs.getString("user_student_id", "CS-2024-8841") ?: "CS-2024-8841"
+    val initials = authPrefs.getString("user_initials", "AY") ?: "AY"
+    val provider = authPrefs.getString("auth_provider", "Academic SSO") ?: "Academic SSO"
+    val isLoggedIn = authPrefs.getBoolean("is_logged_in", true)
+    return UserProfile(
+      name = name,
+      email = email,
+      role = role,
+      university = uni,
+      studentId = studentId,
+      avatarInitials = initials,
+      isLoggedIn = isLoggedIn,
+      authProvider = provider
+    )
+  }
+
+  private fun saveUser(user: UserProfile, isLoggedIn: Boolean) {
+    authPrefs.edit()
+      .putString("user_name", user.name)
+      .putString("user_email", user.email)
+      .putString("user_role", user.role)
+      .putString("user_university", user.university)
+      .putString("user_student_id", user.studentId)
+      .putString("user_initials", user.avatarInitials)
+      .putString("auth_provider", user.authProvider)
+      .putBoolean("is_logged_in", isLoggedIn)
+      .apply()
+  }
+
+  fun login(email: String, pass: String, rememberMe: Boolean = true): Boolean {
+    val cleanEmail = email.trim()
+    if (cleanEmail.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
+      viewModelScope.launch { _snackbarMessage.emit("Please enter a valid academic email address.") }
+      return false
+    }
+    if (pass.trim().length < 6) {
+      viewModelScope.launch { _snackbarMessage.emit("Password must be at least 6 characters long.") }
+      return false
+    }
+    val namePart = cleanEmail.substringBefore("@").replace(".", " ").split(" ")
+      .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+    val initials = namePart.split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("")
+      .ifBlank { "ST" }
+    val updatedUser = _currentUser.value.copy(
+      email = cleanEmail,
+      name = if (_currentUser.value.email.equals(cleanEmail, ignoreCase = true)) _currentUser.value.name else namePart,
+      avatarInitials = initials,
+      isLoggedIn = true,
+      authProvider = "Email & Password",
+      rememberMe = rememberMe,
+      lastLoginTime = System.currentTimeMillis()
+    )
+    saveUser(updatedUser, isLoggedIn = true)
+    _currentUser.value = updatedUser
+    _isAuthenticated.value = true
+    _currentScreen.value = Screen.Dashboard
+    viewModelScope.launch {
+      _snackbarMessage.emit("Signed in successfully as ${updatedUser.name}")
+    }
+    return true
+  }
+
+  fun register(
+    name: String,
+    email: String,
+    pass: String,
+    university: String,
+    studentId: String = "",
+    rememberMe: Boolean = true
+  ): Boolean {
+    if (name.isBlank()) {
+      viewModelScope.launch { _snackbarMessage.emit("Please enter your full name.") }
+      return false
+    }
+    val cleanEmail = email.trim()
+    if (cleanEmail.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
+      viewModelScope.launch { _snackbarMessage.emit("Please enter a valid university email address.") }
+      return false
+    }
+    if (pass.trim().length < 6) {
+      viewModelScope.launch { _snackbarMessage.emit("Password must be at least 6 characters.") }
+      return false
+    }
+    val initials = name.trim().split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("")
+      .ifBlank { "ST" }
+    val newUser = UserProfile(
+      id = "user_${System.currentTimeMillis()}",
+      name = name.trim(),
+      email = cleanEmail,
+      role = "University Student",
+      university = university.ifBlank { "University Academic Scholar" },
+      studentId = studentId.ifBlank { "ID-${(1000..9999).random()}" },
+      avatarInitials = initials,
+      isLoggedIn = true,
+      authProvider = "Email & Password",
+      rememberMe = rememberMe,
+      lastLoginTime = System.currentTimeMillis()
+    )
+    saveUser(newUser, isLoggedIn = true)
+    _currentUser.value = newUser
+    _isAuthenticated.value = true
+    _currentScreen.value = Screen.Dashboard
+    viewModelScope.launch {
+      _snackbarMessage.emit("Welcome to StudyPilot, ${newUser.name}!")
+    }
+    return true
+  }
+
+  fun loginWithGoogle() {
+    val user = UserProfile(
+      id = "google_user_8841",
+      name = "Amitesh Yadav",
+      email = "amitesh69.yadav@gmail.com",
+      role = "Computer Science Scholar",
+      university = "Imperial College London",
+      studentId = "CS-2024-8841",
+      avatarInitials = "AY",
+      isLoggedIn = true,
+      authProvider = "Google Student Account",
+      rememberMe = true,
+      lastLoginTime = System.currentTimeMillis()
+    )
+    saveUser(user, isLoggedIn = true)
+    _currentUser.value = user
+    _isAuthenticated.value = true
+    _currentScreen.value = Screen.Dashboard
+    viewModelScope.launch {
+      _snackbarMessage.emit("Signed in with Google: ${user.email}")
+    }
+  }
+
+  fun loginAsGuest() {
+    val guestUser = UserProfile(
+      id = "guest_demo",
+      name = "Guest Scholar",
+      email = "guest.scholar@studypilot.edu",
+      role = "Visiting Scholar (Demo Mode)",
+      university = "Academic Research University",
+      studentId = "DEMO-GUEST",
+      avatarInitials = "GS",
+      isLoggedIn = true,
+      authProvider = "Guest / Demo Mode",
+      rememberMe = false,
+      lastLoginTime = System.currentTimeMillis()
+    )
+    saveUser(guestUser, isLoggedIn = true)
+    _currentUser.value = guestUser
+    _isAuthenticated.value = true
+    _currentScreen.value = Screen.Dashboard
+    viewModelScope.launch {
+      _snackbarMessage.emit("Exploring in Guest Demo Mode")
+    }
+  }
+
+  fun logout() {
+    val loggedOutUser = _currentUser.value.copy(isLoggedIn = false)
+    saveUser(loggedOutUser, isLoggedIn = false)
+    _currentUser.value = loggedOutUser
+    _isAuthenticated.value = false
+    _currentScreen.value = Screen.Login
+    viewModelScope.launch {
+      _snackbarMessage.emit("Signed out successfully.")
+    }
+  }
+
+  fun updateProfile(name: String, email: String, university: String, role: String) {
+    val initials = name.trim().split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("")
+      .ifBlank { _currentUser.value.avatarInitials }
+    val updated = _currentUser.value.copy(
+      name = name.ifBlank { _currentUser.value.name },
+      email = email.ifBlank { _currentUser.value.email },
+      university = university.ifBlank { _currentUser.value.university },
+      role = role.ifBlank { _currentUser.value.role },
+      avatarInitials = initials
+    )
+    saveUser(updated, isLoggedIn = _isAuthenticated.value)
+    _currentUser.value = updated
+    viewModelScope.launch {
+      _snackbarMessage.emit("Academic profile updated.")
+    }
+  }
+
   // Navigation
-  private val _currentScreen = MutableStateFlow<Screen>(Screen.Dashboard)
+  private val _currentScreen = MutableStateFlow<Screen>(
+    if (authPrefs.getBoolean("is_logged_in", true)) Screen.Dashboard else Screen.Login
+  )
   val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
 
   fun navigateTo(screen: Screen) {

@@ -61,7 +61,14 @@ fun SettingsScreen(
   viewModel: StudyPilotViewModel
 ) {
   val subjects by viewModel.subjects.collectAsState()
+  val currentUser by viewModel.currentUser.collectAsState()
   var showAddSubjectDialog by remember { mutableStateOf(false) }
+  var showEditProfileDialog by remember { mutableStateOf(false) }
+
+  var editName by remember(currentUser) { mutableStateOf(currentUser.name) }
+  var editEmail by remember(currentUser) { mutableStateOf(currentUser.email) }
+  var editUniversity by remember(currentUser) { mutableStateOf(currentUser.university) }
+  var editRole by remember(currentUser) { mutableStateOf(currentUser.role) }
 
   val isGeminiConfigured = BuildConfig.GEMINI_API_KEY.isNotBlank() &&
     BuildConfig.GEMINI_API_KEY != "MY_GEMINI_API_KEY"
@@ -88,32 +95,38 @@ fun SettingsScreen(
           ) {
             Row(
               verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(10.dp)
+              horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
               Box(
                 modifier = Modifier
-                  .size(44.dp)
+                  .size(48.dp)
                   .clip(CircleShape)
                   .background(com.example.ui.theme.PaletteDeepSage),
                 contentAlignment = Alignment.Center
               ) {
                 Text(
-                  text = "AY",
+                  text = currentUser.avatarInitials,
                   fontWeight = FontWeight.ExtraBold,
                   color = com.example.ui.theme.PaletteCreamIvory,
-                  fontSize = 15.sp
+                  fontSize = 16.sp
                 )
               }
               Column {
                 Text(
-                  text = "Academic Profile",
+                  text = currentUser.name,
                   style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                   color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                  text = "amitesh69.yadav@gmail.com",
+                  text = currentUser.email,
                   style = MaterialTheme.typography.bodySmall,
                   color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                  text = "${currentUser.university} • ${currentUser.studentId}",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = com.example.ui.theme.PaletteDeepSage,
+                  fontWeight = FontWeight.SemiBold
                 )
               }
             }
@@ -133,6 +146,45 @@ fun SettingsScreen(
             }
           }
 
+          Spacer(modifier = Modifier.height(14.dp))
+
+          // Account Management Buttons
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            OutlinedButton(
+              onClick = {
+                editName = currentUser.name
+                editEmail = currentUser.email
+                editUniversity = currentUser.university
+                editRole = currentUser.role
+                showEditProfileDialog = true
+              },
+              shape = RoundedCornerShape(10.dp),
+              border = androidx.compose.foundation.BorderStroke(1.dp, com.example.ui.theme.PaletteMediumSage),
+              modifier = Modifier
+                .weight(1f)
+                .height(38.dp)
+            ) {
+              Text("Edit Profile", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+
+            Button(
+              onClick = { viewModel.logout() },
+              colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer
+              ),
+              shape = RoundedCornerShape(10.dp),
+              modifier = Modifier
+                .weight(1f)
+                .height(38.dp)
+            ) {
+              Text("Sign Out / Switch", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+          }
+
           Spacer(modifier = Modifier.height(12.dp))
 
           Surface(
@@ -142,7 +194,7 @@ fun SettingsScreen(
           ) {
             Column(modifier = Modifier.padding(10.dp)) {
               Text(
-                text = "💻 Laptop + 📱 Mobile Dual Mode",
+                text = "💻 Laptop + 📱 Mobile Dual Mode (${currentUser.authProvider})",
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurface
@@ -328,6 +380,66 @@ fun SettingsScreen(
       onConfirm = { name, code ->
         viewModel.addSubject(name, code, "#2563EB")
         showAddSubjectDialog = false
+      }
+    )
+  }
+
+  if (showEditProfileDialog) {
+    AlertDialog(
+      onDismissRequest = { showEditProfileDialog = false },
+      title = { Text("Edit Academic Profile", fontWeight = FontWeight.Bold) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          OutlinedTextField(
+            value = editName,
+            onValueChange = { editName = it },
+            label = { Text("Full Name") },
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+          )
+          OutlinedTextField(
+            value = editEmail,
+            onValueChange = { editEmail = it },
+            label = { Text("Academic Email") },
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+          )
+          OutlinedTextField(
+            value = editUniversity,
+            onValueChange = { editUniversity = it },
+            label = { Text("University / Institution") },
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+          )
+          OutlinedTextField(
+            value = editRole,
+            onValueChange = { editRole = it },
+            label = { Text("Academic Major / Role") },
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+          )
+        }
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            viewModel.updateProfile(editName, editEmail, editUniversity, editRole)
+            showEditProfileDialog = false
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = com.example.ui.theme.PaletteDeepSage),
+          shape = RoundedCornerShape(10.dp)
+        ) {
+          Text("Save Profile")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showEditProfileDialog = false }) {
+          Text("Cancel")
+        }
       }
     )
   }

@@ -58,6 +58,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.example.ui.screens.LoginScreen
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -96,6 +97,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun StudyPilotApp(viewModel: StudyPilotViewModel) {
   val currentScreen by viewModel.currentScreen.collectAsState()
+  val currentUser by viewModel.currentUser.collectAsState()
+  val isAuthenticated by viewModel.isAuthenticated.collectAsState()
   val tasks by viewModel.tasks.collectAsState()
   val pendingTaskCount = tasks.count { !it.isCompleted }
 
@@ -111,7 +114,7 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
   }
 
   // Handle system back navigation to return to Dashboard if on a subscreen
-  BackHandler(enabled = currentScreen != Screen.Dashboard && currentScreen != Screen.ActiveQuiz) {
+  BackHandler(enabled = currentScreen != Screen.Dashboard && currentScreen != Screen.ActiveQuiz && currentScreen != Screen.Login) {
     viewModel.navigateTo(Screen.Dashboard)
   }
 
@@ -129,6 +132,7 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
     currentScreen == Screen.Settings
 
   val screenTitle = when (currentScreen) {
+    Screen.Login -> "Authentication"
     Screen.Dashboard -> "StudyPilot AI"
     Screen.Timetable -> "Timetable & Schedule"
     Screen.MyTopics -> "My Topics Library"
@@ -145,7 +149,7 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
 
     Row(modifier = Modifier.fillMaxSize()) {
       // Left Navigation Rail for Laptop / Tablet / Foldable mode
-      if (isWideScreen && currentScreen != Screen.ActiveQuiz) {
+      if (isWideScreen && currentScreen != Screen.ActiveQuiz && currentScreen != Screen.Login) {
         NavigationRail(
           containerColor = MaterialTheme.colorScheme.surface,
           contentColor = MaterialTheme.colorScheme.primary,
@@ -201,7 +205,7 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
         contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-      if (currentScreen != Screen.ActiveQuiz) {
+      if (currentScreen != Screen.ActiveQuiz && currentScreen != Screen.Login) {
         TopAppBar(
           title = {
             Text(
@@ -304,6 +308,26 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
                 )
               }
             }
+
+            // Academic User Profile Avatar Button
+            IconButton(
+              onClick = { viewModel.navigateTo(Screen.Settings) }
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(32.dp)
+                  .clip(CircleShape)
+                  .background(com.example.ui.theme.PaletteDeepSage),
+                contentAlignment = Alignment.Center
+              ) {
+                Text(
+                  text = currentUser.avatarInitials,
+                  fontWeight = FontWeight.ExtraBold,
+                  color = com.example.ui.theme.PaletteCreamIvory,
+                  fontSize = 11.sp
+                )
+              }
+            }
           },
           colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -312,8 +336,8 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
       }
     },
     bottomBar = {
-      // Show bottom bar on mobile screens, hide on laptop (wide) or during active quiz
-      if (!isWideScreen && currentScreen != Screen.ActiveQuiz) {
+      // Show bottom bar on mobile screens, hide on laptop (wide), active quiz, or login
+      if (!isWideScreen && currentScreen != Screen.ActiveQuiz && currentScreen != Screen.Login) {
         NavigationBar(
           containerColor = MaterialTheme.colorScheme.surface,
           contentColor = MaterialTheme.colorScheme.primary,
@@ -356,6 +380,12 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
         .padding(innerPadding)
     ) {
       when (currentScreen) {
+        Screen.Login -> {
+          LoginScreen(
+            viewModel = viewModel,
+            onLoginSuccess = { viewModel.navigateTo(Screen.Dashboard) }
+          )
+        }
         Screen.Dashboard -> {
           DashboardScreen(
             viewModel = viewModel,

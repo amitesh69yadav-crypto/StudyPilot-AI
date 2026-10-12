@@ -134,3 +134,16 @@ data class ScheduleFormat(
   val createdAt: Long = System.currentTimeMillis()
 )
 
+data class UserProfile(
+  val id: String = "user_default",
+  val name: String = "Amitesh Yadav",
+  val email: String = "amitesh69.yadav@gmail.com",
+  val role: String = "Computer Science Scholar",
+  val university: String = "Imperial College London",
+  val studentId: String = "CS-2024-8841",
+  val avatarInitials: String = "AY",
+  val isLoggedIn: Boolean = true,
+  val authProvider: String = "Email & Password",
+  val rememberMe: Boolean = true,
+  val lastLoginTime: Long = System.currentTimeMillis()
+)
