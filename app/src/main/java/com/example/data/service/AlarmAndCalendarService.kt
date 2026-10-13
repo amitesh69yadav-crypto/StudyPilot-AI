@@ -1,5 +1,6 @@
 package com.example.data.service
 
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -18,6 +19,12 @@ import android.provider.CalendarContract
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.data.model.TimetableSession
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -153,29 +160,168 @@ class AlarmAndCalendarService(private val context: Context) {
     }
   }
 
+  // --- Alarm Scheduling with Android AlarmManager ---
+  private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+  private var toneJob: kotlinx.coroutines.Job? = null
+  private var toneGenerator: android.media.ToneGenerator? = null
+
+  fun computeSessionTriggerTimeMillis(session: TimetableSession): Long {
+    return try {
+      val (startH, startM) = parseTime(session.startTime)
+      val dateParts = session.date.split("-")
+      val cal = Calendar.getInstance()
+      if (dateParts.size == 3) {
+        val year = dateParts[0].toIntOrNull() ?: cal.get(Calendar.YEAR)
+        val month = (dateParts[1].toIntOrNull() ?: 1) - 1
+        val day = dateParts[2].toIntOrNull() ?: cal.get(Calendar.DAY_OF_MONTH)
+        cal.set(year, month, day, startH, startM, 0)
+      } else {
+        cal.set(Calendar.HOUR_OF_DAY, startH)
+        cal.set(Calendar.MINUTE, startM)
+        cal.set(Calendar.SECOND, 0)
+      }
+      cal.set(Calendar.MILLISECOND, 0)
+      val reminderOffsetMs = session.reminderMinutes * 60 * 1000L
+      cal.timeInMillis - reminderOffsetMs
+    } catch (e: Exception) {
+      0L
+    }
+  }
+
+  fun scheduleSessionAlarm(session: TimetableSession) {
+    if (!session.isAlarmEnabled) return
+    val triggerTime = computeSessionTriggerTimeMillis(session)
+    if (triggerTime <= System.currentTimeMillis()) return
+
+    val intent = Intent(context, AlarmReceiver::class.java).apply {
+      action = AlarmReceiver.ACTION_TRIGGER_STUDY_ALARM
+      putExtra(AlarmReceiver.EXTRA_SESSION_ID, session.id)
+      putExtra(AlarmReceiver.EXTRA_SUBJECT_NAME, session.subjectName)
+      putExtra(AlarmReceiver.EXTRA_TOPIC, session.topic)
+      putExtra(AlarmReceiver.EXTRA_START_TIME, session.startTime)
+      putExtra(AlarmReceiver.EXTRA_END_TIME, session.endTime)
+      putExtra(AlarmReceiver.EXTRA_LOCATION, session.location)
+      putExtra(AlarmReceiver.EXTRA_NOTES, session.notes)
+    }
+
+    val pendingIntent = PendingIntent.getBroadcast(
+      context,
+      session.id.toInt(),
+      intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (alarmManager?.canScheduleExactAlarms() == true) {
+          alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+        } else {
+          alarmManager?.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+        }
+      } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        alarmManager?.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+      } else {
+        alarmManager?.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+      }
+    } catch (e: Exception) {
+      alarmManager?.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+    }
+  }
+
+  fun cancelSessionAlarm(session: TimetableSession) {
+    val intent = Intent(context, AlarmReceiver::class.java).apply {
+      action = AlarmReceiver.ACTION_TRIGGER_STUDY_ALARM
+    }
+    val pendingIntent = PendingIntent.getBroadcast(
+      context,
+      session.id.toInt(),
+      intent,
+      PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+    )
+    if (pendingIntent != null) {
+      alarmManager?.cancel(pendingIntent)
+      pendingIntent.cancel()
+    }
+  }
+
+  fun scheduleTestAlarm(session: TimetableSession, delaySeconds: Int = 5) {
+    val triggerTime = System.currentTimeMillis() + (delaySeconds * 1000L)
+    val intent = Intent(context, AlarmReceiver::class.java).apply {
+      action = AlarmReceiver.ACTION_TRIGGER_STUDY_ALARM
+      putExtra(AlarmReceiver.EXTRA_SESSION_ID, session.id)
+      putExtra(AlarmReceiver.EXTRA_SUBJECT_NAME, session.subjectName)
+      putExtra(AlarmReceiver.EXTRA_TOPIC, session.topic)
+      putExtra(AlarmReceiver.EXTRA_START_TIME, session.startTime)
+      putExtra(AlarmReceiver.EXTRA_END_TIME, session.endTime)
+      putExtra(AlarmReceiver.EXTRA_LOCATION, session.location)
+      putExtra(AlarmReceiver.EXTRA_NOTES, session.notes)
+    }
+    val pendingIntent = PendingIntent.getBroadcast(
+      context,
+      session.id.toInt(),
+      intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        alarmManager?.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+      } else {
+        alarmManager?.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+      }
+    } catch (e: Exception) {
+      alarmManager?.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+    }
+  }
+
+  fun scheduleSnoozeAlarm(sessionId: Long, subjectName: String, topic: String, startTime: String, minutes: Int = 5) {
+    val triggerTime = System.currentTimeMillis() + (minutes * 60 * 1000L)
+    val intent = Intent(context, AlarmReceiver::class.java).apply {
+      action = AlarmReceiver.ACTION_TRIGGER_STUDY_ALARM
+      putExtra(AlarmReceiver.EXTRA_SESSION_ID, sessionId)
+      putExtra(AlarmReceiver.EXTRA_SUBJECT_NAME, subjectName)
+      putExtra(AlarmReceiver.EXTRA_TOPIC, topic)
+      putExtra(AlarmReceiver.EXTRA_START_TIME, startTime)
+    }
+    val pendingIntent = PendingIntent.getBroadcast(
+      context,
+      sessionId.toInt(),
+      intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        alarmManager?.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+      } else {
+        alarmManager?.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+      }
+    } catch (e: Exception) {
+      alarmManager?.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+    }
+  }
+
   // --- Alarm Audio & Vibration Alert ---
   fun triggerAlarmAlert(session: TimetableSession) {
-    // 1. Vibrate device
+    // 1. Vibrate device with repeating alert pulse
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
         val vibrator = vibratorManager?.defaultVibrator
-        vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 250, 500, 250, 500), -1))
+        vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 600, 300, 600, 300, 600), 0))
       } else {
         @Suppress("DEPRECATION")
         val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-          vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 250, 500, 250, 500), -1))
+          vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 600, 300, 600, 300, 600), 0))
         } else {
           @Suppress("DEPRECATION")
-          vibrator?.vibrate(longArrayOf(0, 500, 250, 500, 250, 500), -1)
+          vibrator?.vibrate(longArrayOf(0, 600, 300, 600, 300, 600), 0)
         }
       }
     } catch (e: Exception) {
       // Ignore vibration error on emulators
     }
 
-    // 2. Play gentle alarm ringtone
+    // 2. Play ringtone and procedural loud alarm beeps
     try {
       stopAlarmSound()
       val alertUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
@@ -193,6 +339,27 @@ class AlarmAndCalendarService(private val context: Context) {
       // Ignore ringtone failure
     }
 
+    // Audible fallback using ToneGenerator ensures sound works on emulators & silent modes
+    try {
+      toneGenerator?.release()
+      toneGenerator = android.media.ToneGenerator(android.media.AudioManager.STREAM_ALARM, 100)
+      toneJob?.cancel()
+      toneJob = CoroutineScope(Dispatchers.Default).launch {
+        while (isActive) {
+          try {
+            toneGenerator?.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
+            delay(650)
+            toneGenerator?.startTone(android.media.ToneGenerator.TONE_PROP_BEEP2, 300)
+            delay(750)
+          } catch (e: Exception) {
+            break
+          }
+        }
+      }
+    } catch (e: Exception) {
+      // Ignore
+    }
+
     // 3. Post System Notification
     postAlarmNotification(session)
   }
@@ -204,13 +371,31 @@ class AlarmAndCalendarService(private val context: Context) {
     } catch (e: Exception) {
       // Ignore
     }
+
+    try {
+      toneJob?.cancel()
+      toneJob = null
+      toneGenerator?.stopTone()
+      toneGenerator?.release()
+      toneGenerator = null
+    } catch (e: Exception) {
+      // Ignore
+    }
+
+    try {
+      val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+      vibrator?.cancel()
+    } catch (e: Exception) {
+      // Ignore
+    }
   }
 
   private fun postAlarmNotification(session: TimetableSession) {
     try {
       val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
       val intent = Intent(context, MainActivity::class.java).apply {
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        putExtra("extra_ringing_session_id", session.id)
       }
       val pendingIntent = PendingIntent.getActivity(
         context,
@@ -219,17 +404,46 @@ class AlarmAndCalendarService(private val context: Context) {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
       )
 
+      val dismissIntent = Intent(context, AlarmReceiver::class.java).apply {
+        action = AlarmReceiver.ACTION_DISMISS_ALARM
+        putExtra(AlarmReceiver.EXTRA_SESSION_ID, session.id)
+      }
+      val dismissPendingIntent = PendingIntent.getBroadcast(
+        context,
+        (session.id + 10000).toInt(),
+        dismissIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      )
+
+      val snoozeIntent = Intent(context, AlarmReceiver::class.java).apply {
+        action = AlarmReceiver.ACTION_SNOOZE_ALARM
+        putExtra(AlarmReceiver.EXTRA_SESSION_ID, session.id)
+        putExtra(AlarmReceiver.EXTRA_SUBJECT_NAME, session.subjectName)
+        putExtra(AlarmReceiver.EXTRA_TOPIC, session.topic)
+        putExtra(AlarmReceiver.EXTRA_START_TIME, session.startTime)
+      }
+      val snoozePendingIntent = PendingIntent.getBroadcast(
+        context,
+        (session.id + 20000).toInt(),
+        snoozeIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      )
+
       val notification = NotificationCompat.Builder(context, channelId)
         .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-        .setContentTitle("⏰ Time for ${session.subjectName}")
+        .setContentTitle("⏰ Alarm: ${session.subjectName}")
         .setContentText("${session.topic} (${session.startTime} - ${session.endTime})")
         .setStyle(NotificationCompat.BigTextStyle().bigText(
-          "Scheduled now: ${session.topic}\nLocation: ${session.location.ifBlank { "Campus" }}\n${session.notes}"
+          "Scheduled now: ${session.topic}\nTime: ${session.startTime} - ${session.endTime}\nLocation: ${session.location.ifBlank { "Campus" }}\n${session.notes}"
         ))
         .setPriority(NotificationCompat.PRIORITY_MAX)
         .setCategory(NotificationCompat.CATEGORY_ALARM)
         .setAutoCancel(true)
+        .setFullScreenIntent(pendingIntent, true)
         .setContentIntent(pendingIntent)
+        .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPendingIntent)
+        .addAction(android.R.drawable.ic_popup_reminder, "Snooze 5m", snoozePendingIntent)
+        .addAction(android.R.drawable.ic_media_play, "Start Study", pendingIntent)
         .build()
 
       notificationManager?.notify(session.id.toInt(), notification)

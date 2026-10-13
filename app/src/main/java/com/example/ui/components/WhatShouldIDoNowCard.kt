@@ -450,20 +450,53 @@ fun WhatShouldIDoNowCard(
           )
 
           Spacer(modifier = Modifier.height(12.dp))
-          Button(
-            onClick = onPlanScheduleClick,
-            colors = ButtonDefaults.buttonColors(
-              containerColor = PaletteDeepSage,
-              contentColor = PaletteCreamIvory
-            ),
-            shape = RoundedCornerShape(10.dp),
-            modifier = Modifier
-              .fillMaxWidth()
-              .height(40.dp)
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
           ) {
-            Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Plan / Edit Today's Schedule", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Button(
+              onClick = onPlanScheduleClick,
+              colors = ButtonDefaults.buttonColors(
+                containerColor = PaletteDeepSage,
+                contentColor = PaletteCreamIvory
+              ),
+              shape = RoundedCornerShape(10.dp),
+              modifier = Modifier
+                .weight(1f)
+                .height(40.dp)
+            ) {
+              Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Plan Schedule", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+
+            OutlinedButton(
+              onClick = {
+                val dummySession = TimetableSession(
+                  id = 999999L,
+                  subjectId = 0L,
+                  subjectName = "StudyPilot Alarm Test",
+                  topic = "Focused Study & Revision Sprint",
+                  date = "",
+                  startTime = "Now",
+                  endTime = "+45m",
+                  location = "Campus / Desk",
+                  notes = "Testing ringtone audio, urgent vibration, and notification alert.",
+                  isAlarmEnabled = true
+                )
+                onTestAlarm(dummySession)
+              },
+              shape = RoundedCornerShape(10.dp),
+              colors = ButtonDefaults.outlinedButtonColors(contentColor = PaletteDarkText),
+              border = androidx.compose.foundation.BorderStroke(1.dp, PaletteMediumSage),
+              modifier = Modifier
+                .weight(1f)
+                .height(40.dp)
+            ) {
+              Icon(Icons.Default.Alarm, contentDescription = null, tint = PaletteDarkText, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Test Alarm", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
           }
         }
       }

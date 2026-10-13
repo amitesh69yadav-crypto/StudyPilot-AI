@@ -66,15 +66,23 @@ data class ActiveQuizState(
 
 class StudyPilotViewModel(application: Application) : AndroidViewModel(application) {
 
-  private val repository: StudyPilotRepository
+  private val repository: StudyPilotRepository =
+    StudyPilotRepository(AppDatabase.getDatabase(application).studyPilotDao())
 
-  init {
-    val db = AppDatabase.getDatabase(application)
-    repository = StudyPilotRepository(db.studyPilotDao())
-    viewModelScope.launch {
-      repository.seedSampleUniversityData()
-    }
-  }
+  // --- UI notifications ---
+  private val _snackbarMessage = MutableSharedFlow<String>()
+  val snackbarMessage: SharedFlow<String> = _snackbarMessage.asSharedFlow()
+
+  // --- Google Calendar & Alarm Services ---
+  val alarmAndCalendarService = AlarmAndCalendarService(application)
+
+  private val _isCalendarConnected = MutableStateFlow(true)
+  val isCalendarConnected: StateFlow<Boolean> = _isCalendarConnected.asStateFlow()
+
+  val calendarAccountEmail = "amitesh69.yadav@gmail.com"
+
+  private val _ringingAlarmSession = MutableStateFlow<TimetableSession?>(null)
+  val ringingAlarmSession: StateFlow<TimetableSession?> = _ringingAlarmSession.asStateFlow()
 
   // --- Reactive States ---
   val subjects: StateFlow<List<Subject>> = repository.allSubjects
@@ -98,17 +106,6 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
   val scheduleFormats: StateFlow<List<com.example.data.model.ScheduleFormat>> = repository.allScheduleFormats
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-  // --- Google Calendar & Alarm Services ---
-  val alarmAndCalendarService = AlarmAndCalendarService(application)
-
-  private val _isCalendarConnected = MutableStateFlow(true)
-  val isCalendarConnected: StateFlow<Boolean> = _isCalendarConnected.asStateFlow()
-
-  val calendarAccountEmail = "amitesh69.yadav@gmail.com"
-
-  private val _ringingAlarmSession = MutableStateFlow<TimetableSession?>(null)
-  val ringingAlarmSession: StateFlow<TimetableSession?> = _ringingAlarmSession.asStateFlow()
-
   val scheduleStatus: StateFlow<CurrentScheduleStatus> = repository.allSessions
     .map { list -> alarmAndCalendarService.evaluateCurrentStatus(list) }
     .stateIn(
@@ -116,6 +113,76 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
       SharingStarted.WhileSubscribed(5000),
       CurrentScheduleStatus(ScheduleState.FREE_TIME, formattedStatusText = "Checking schedule status...")
     )
+
+  init {
+    viewModelScope.launch {
+      repository.seedSampleUniversityData()
+    }
+
+    // 1. Listen for background & broadcast alarm events from AlarmReceiver
+    viewModelScope.launch {
+      com.example.data.service.AlarmEventBus.events.collect { event ->
+        when (event) {
+          is com.example.data.service.AlarmEvent.Triggered -> {
+            val session = sessions.value.find { it.id == event.sessionId }
+              ?: TimetableSession(
+                id = event.sessionId,
+                subjectId = 0L,
+                subjectName = event.subjectName,
+                topic = event.topic,
+                date = "",
+                startTime = event.startTime,
+                endTime = event.endTime,
+                location = event.location,
+                notes = event.notes,
+                isAlarmEnabled = true
+              )
+            _ringingAlarmSession.value = session
+          }
+          is com.example.data.service.AlarmEvent.Dismissed -> {
+            _ringingAlarmSession.value = null
+          }
+          is com.example.data.service.AlarmEvent.Snoozed -> {
+            _ringingAlarmSession.value = null
+          }
+        }
+      }
+    }
+
+    // 2. Real-time in-app alarm trigger: checks upcoming sessions every 10 seconds
+    viewModelScope.launch {
+      val triggeredSessionIdsToday = mutableSetOf<Long>()
+      while (true) {
+        kotlinx.coroutines.delay(10_000)
+        try {
+          val now = System.currentTimeMillis()
+          val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(now))
+          val todaySessions = sessions.value.filter { it.date == todayStr && it.isAlarmEnabled }
+          for (session in todaySessions) {
+            if (triggeredSessionIdsToday.contains(session.id)) continue
+            val triggerTime = alarmAndCalendarService.computeSessionTriggerTimeMillis(session)
+            // Trigger if within 60 seconds window
+            if (now >= triggerTime && now <= triggerTime + 70_000) {
+              triggeredSessionIdsToday.add(session.id)
+              triggerTestAlarm(session)
+              break
+            }
+          }
+        } catch (e: Exception) {
+          // Ignore
+        }
+      }
+    }
+
+    // 3. Automatically schedule exact alarms for all enabled sessions
+    viewModelScope.launch {
+      sessions.collect { list ->
+        list.filter { it.isAlarmEnabled }.forEach { s ->
+          alarmAndCalendarService.scheduleSessionAlarm(s)
+        }
+      }
+    }
+  }
 
   // --- User Authentication & Multi-Device Profile ---
   private val authPrefs = application.getSharedPreferences("studypilot_auth_prefs", Context.MODE_PRIVATE)
@@ -335,9 +402,6 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
   private val _activeQuizState = MutableStateFlow(ActiveQuizState())
   val activeQuizState: StateFlow<ActiveQuizState> = _activeQuizState.asStateFlow()
 
-  // UI notifications
-  private val _snackbarMessage = MutableSharedFlow<String>()
-  val snackbarMessage: SharedFlow<String> = _snackbarMessage.asSharedFlow()
 
   // Loading indicator for AI tasks
   private val _isAiLoading = MutableStateFlow(false)
@@ -642,26 +706,52 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
     viewModelScope.launch {
       val updated = session.copy(isAlarmEnabled = !session.isAlarmEnabled)
       repository.updateSession(updated)
-      val status = if (updated.isAlarmEnabled) "Alarm turned ON" else "Alarm turned OFF"
-      _snackbarMessage.emit("$status for '${session.topic}'")
+      if (updated.isAlarmEnabled) {
+        alarmAndCalendarService.scheduleSessionAlarm(updated)
+        _snackbarMessage.emit("⏰ Alarm enabled for '${session.topic}' (${session.startTime})")
+      } else {
+        alarmAndCalendarService.cancelSessionAlarm(updated)
+        _snackbarMessage.emit("Alarm turned off for '${session.topic}'")
+      }
     }
   }
 
   fun triggerTestAlarm(session: TimetableSession) {
     _ringingAlarmSession.value = session
     alarmAndCalendarService.triggerAlarmAlert(session)
+    viewModelScope.launch {
+      _snackbarMessage.emit("⏰ Alarm ringing for '${session.topic}'!")
+    }
+  }
+
+  fun scheduleTestAlarm(session: TimetableSession, delaySeconds: Int = 5) {
+    alarmAndCalendarService.scheduleTestAlarm(session, delaySeconds)
+    viewModelScope.launch {
+      _snackbarMessage.emit("⏰ Alarm set for $delaySeconds seconds from now! Testing ringtone & notification...")
+    }
+  }
+
+  fun triggerSessionAlarmById(sessionId: Long) {
+    val session = sessions.value.find { it.id == sessionId }
+    if (session != null) {
+      triggerTestAlarm(session)
+    }
   }
 
   fun dismissAlarm() {
     alarmAndCalendarService.stopAlarmSound()
     _ringingAlarmSession.value = null
+    viewModelScope.launch {
+      _snackbarMessage.emit("Alarm dismissed")
+    }
   }
 
-  fun snoozeAlarm(session: TimetableSession, minutes: Int = 10) {
+  fun snoozeAlarm(session: TimetableSession, minutes: Int = 5) {
     alarmAndCalendarService.stopAlarmSound()
     _ringingAlarmSession.value = null
+    alarmAndCalendarService.scheduleSnoozeAlarm(session.id, session.subjectName, session.topic, session.startTime, minutes)
     viewModelScope.launch {
-      _snackbarMessage.emit("Alarm snoozed for $minutes minutes for '${session.topic}'")
+      _snackbarMessage.emit("⏰ Snoozed for $minutes minutes for '${session.topic}'")
     }
   }
 

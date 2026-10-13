@@ -1092,19 +1092,6 @@ fun TimetableScreen(
       }
     )
   }
-
-  // Ringing Alarm Dialog
-  ringingAlarmSession?.let { ringingSession ->
-    ActiveAlarmAlertDialog(
-      session = ringingSession,
-      onDismiss = { viewModel.dismissAlarm() },
-      onSnooze = { viewModel.snoozeAlarm(ringingSession, 5) },
-      onStartSession = {
-        viewModel.dismissAlarm()
-        viewModel.openTutorForSubject(ringingSession.subjectId, "I'm starting my scheduled session on ${ringingSession.topic}.")
-      }
-    )
-  }
 }
 
 /**
@@ -2037,6 +2024,35 @@ fun GoogleCalendarEventCard(
                 fontWeight = FontWeight.Bold,
                 color = PaletteDarkText
               )
+            }
+          }
+
+          if (session.isAlarmEnabled) {
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = PaletteDeepSage,
+              modifier = Modifier
+                .height(34.dp)
+                .clickable { onTestAlarm() }
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Icon(
+                  imageVector = Icons.Default.NotificationsActive,
+                  contentDescription = "Test Alarm",
+                  tint = PaletteCreamIvory,
+                  modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                  text = "Ring",
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = PaletteCreamIvory
+                )
+              }
             }
           }
 

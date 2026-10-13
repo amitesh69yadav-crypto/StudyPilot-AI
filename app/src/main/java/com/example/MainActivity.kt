@@ -58,6 +58,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.content.Intent
+import com.example.ui.components.ActiveAlarmAlertDialog
 import com.example.ui.screens.LoginScreen
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -85,10 +87,23 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+    handleAlarmIntent(intent)
     setContent {
       StudyPilotTheme {
         StudyPilotApp(viewModel = viewModel)
       }
+    }
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    handleAlarmIntent(intent)
+  }
+
+  private fun handleAlarmIntent(intent: Intent?) {
+    val ringingSessionId = intent?.getLongExtra("extra_ringing_session_id", 0L) ?: 0L
+    if (ringingSessionId > 0) {
+      viewModel.triggerSessionAlarmById(ringingSessionId)
     }
   }
 }
@@ -100,6 +115,7 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
   val currentUser by viewModel.currentUser.collectAsState()
   val isAuthenticated by viewModel.isAuthenticated.collectAsState()
   val tasks by viewModel.tasks.collectAsState()
+  val ringingAlarmSession by viewModel.ringingAlarmSession.collectAsState()
   val pendingTaskCount = tasks.count { !it.isCompleted }
 
   val snackbarHostState = remember { SnackbarHostState() }
@@ -432,5 +448,19 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
     }
   }
     }
+  }
+
+  // Global Active Alarm Ringing Dialog: triggers across the entire app
+  ringingAlarmSession?.let { ringingSession ->
+    ActiveAlarmAlertDialog(
+      session = ringingSession,
+      onDismiss = { viewModel.dismissAlarm() },
+      onSnooze = { viewModel.snoozeAlarm(ringingSession, 5) },
+      onStartSession = {
+        viewModel.dismissAlarm()
+        viewModel.openTutorForSubject(ringingSession.subjectId, "I'm starting my scheduled session on ${ringingSession.topic}.")
+        viewModel.navigateTo(Screen.AiTutor)
+      }
+    )
   }
 }

@@ -33,6 +33,9 @@ interface StudyPilotDao {
   @Query("SELECT * FROM timetable_sessions ORDER BY date ASC, startTime ASC")
   fun getAllSessions(): Flow<List<TimetableSession>>
 
+  @Query("SELECT * FROM timetable_sessions ORDER BY date ASC, startTime ASC")
+  suspend fun getAllSessionsList(): List<TimetableSession>
+
   @Query("SELECT * FROM timetable_sessions WHERE date = :date ORDER BY startTime ASC")
   fun getSessionsForDate(date: String): Flow<List<TimetableSession>>
 
