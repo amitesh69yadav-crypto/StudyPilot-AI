@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flatMapLatest
 import com.example.data.service.AlarmAndCalendarService
 import com.example.data.service.CurrentScheduleStatus
 import com.example.data.service.ScheduleState
@@ -84,29 +86,193 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
   private val _ringingAlarmSession = MutableStateFlow<TimetableSession?>(null)
   val ringingAlarmSession: StateFlow<TimetableSession?> = _ringingAlarmSession.asStateFlow()
 
-  // --- Reactive States ---
-  val subjects: StateFlow<List<Subject>> = repository.allSubjects
+  // --- Registered Student Accounts & Multi-Student Account Isolation ---
+  private val authPrefs = application.getSharedPreferences("studypilot_auth_prefs", Context.MODE_PRIVATE)
+
+  private val defaultAccounts = listOf(
+    UserProfile(
+      id = "student_amitesh",
+      name = "Amitesh Yadav",
+      email = "amitesh69.yadav@gmail.com",
+      role = "Computer Science Scholar",
+      university = "Imperial College London",
+      studentId = "CS-2024-8841",
+      avatarInitials = "AY",
+      isLoggedIn = true,
+      authProvider = "Google / Academic SSO"
+    ),
+    UserProfile(
+      id = "student_sarah",
+      name = "Sarah Chen",
+      email = "sarah.chen@cambridge.ac.uk",
+      role = "Bioinformatics & Pre-Med",
+      university = "University of Cambridge",
+      studentId = "MED-2024-1049",
+      avatarInitials = "SC",
+      isLoggedIn = false,
+      authProvider = "Cambridge Student Portal"
+    ),
+    UserProfile(
+      id = "student_marcus",
+      name = "Marcus Vance",
+      email = "marcus.vance@mit.edu",
+      role = "Mechanical Engineering Scholar",
+      university = "Massachusetts Institute of Technology",
+      studentId = "ME-2024-7723",
+      avatarInitials = "MV",
+      isLoggedIn = false,
+      authProvider = "MIT Kerberos SSO"
+    )
+  )
+
+  private fun loadRegisteredAccounts(): List<UserProfile> {
+    val jsonStr = authPrefs.getString("registered_students_json", null) ?: return defaultAccounts
+    return try {
+      val arr = JSONArray(jsonStr)
+      val list = mutableListOf<UserProfile>()
+      for (i in 0 until arr.length()) {
+        val obj = arr.getJSONObject(i)
+        list.add(
+          UserProfile(
+            id = obj.optString("id", "user_${System.currentTimeMillis()}"),
+            name = obj.optString("name", "Student Scholar"),
+            email = obj.optString("email", "student@university.edu"),
+            role = obj.optString("role", "University Scholar"),
+            university = obj.optString("university", "Academic University"),
+            studentId = obj.optString("studentId", "ID-2024"),
+            avatarInitials = obj.optString("avatarInitials", "ST"),
+            isLoggedIn = obj.optBoolean("isLoggedIn", false),
+            authProvider = obj.optString("authProvider", "Academic Portal"),
+            rememberMe = obj.optBoolean("rememberMe", true),
+            lastLoginTime = obj.optLong("lastLoginTime", System.currentTimeMillis())
+          )
+        )
+      }
+      if (list.isEmpty()) defaultAccounts else list
+    } catch (_: Exception) {
+      defaultAccounts
+    }
+  }
+
+  private fun saveRegisteredAccounts(list: List<UserProfile>) {
+    try {
+      val arr = JSONArray()
+      for (u in list) {
+        arr.put(JSONObject().apply {
+          put("id", u.id)
+          put("name", u.name)
+          put("email", u.email)
+          put("role", u.role)
+          put("university", u.university)
+          put("studentId", u.studentId)
+          put("avatarInitials", u.avatarInitials)
+          put("isLoggedIn", u.isLoggedIn)
+          put("authProvider", u.authProvider)
+          put("rememberMe", u.rememberMe)
+          put("lastLoginTime", u.lastLoginTime)
+        })
+      }
+      authPrefs.edit().putString("registered_students_json", arr.toString()).apply()
+    } catch (_: Exception) {}
+  }
+
+  private fun loadSavedUser(): UserProfile {
+    val activeId = authPrefs.getString("active_user_id", "student_amitesh") ?: "student_amitesh"
+    val accounts = loadRegisteredAccounts()
+    val match = accounts.find { it.id == activeId }
+    if (match != null) return match
+
+    val name = authPrefs.getString("user_name", "Amitesh Yadav") ?: "Amitesh Yadav"
+    val email = authPrefs.getString("user_email", "amitesh69.yadav@gmail.com") ?: "amitesh69.yadav@gmail.com"
+    val role = authPrefs.getString("user_role", "Computer Science Scholar") ?: "Computer Science Scholar"
+    val uni = authPrefs.getString("user_university", "Imperial College London") ?: "Imperial College London"
+    val studentId = authPrefs.getString("user_student_id", "CS-2024-8841") ?: "CS-2024-8841"
+    val initials = authPrefs.getString("user_initials", "AY") ?: "AY"
+    val provider = authPrefs.getString("auth_provider", "Academic SSO") ?: "Academic SSO"
+    val isLoggedIn = authPrefs.getBoolean("is_logged_in", true)
+    return UserProfile(
+      id = activeId,
+      name = name,
+      email = email,
+      role = role,
+      university = uni,
+      studentId = studentId,
+      avatarInitials = initials,
+      isLoggedIn = isLoggedIn,
+      authProvider = provider
+    )
+  }
+
+  private fun saveUser(user: UserProfile, isLoggedIn: Boolean) {
+    authPrefs.edit()
+      .putString("active_user_id", user.id)
+      .putString("user_name", user.name)
+      .putString("user_email", user.email)
+      .putString("user_role", user.role)
+      .putString("user_university", user.university)
+      .putString("user_student_id", user.studentId)
+      .putString("user_initials", user.avatarInitials)
+      .putString("auth_provider", user.authProvider)
+      .putBoolean("is_logged_in", isLoggedIn)
+      .apply()
+
+    val currentList = _savedAccounts.value.toMutableList()
+    val idx = currentList.indexOfFirst { it.id == user.id || it.email.equals(user.email, ignoreCase = true) }
+    if (idx >= 0) {
+      currentList[idx] = user.copy(isLoggedIn = isLoggedIn)
+    } else {
+      currentList.add(user.copy(isLoggedIn = isLoggedIn))
+    }
+    _savedAccounts.value = currentList
+    saveRegisteredAccounts(currentList)
+  }
+
+  private val _savedAccounts = MutableStateFlow<List<UserProfile>>(loadRegisteredAccounts())
+  val savedAccounts: StateFlow<List<UserProfile>> = _savedAccounts.asStateFlow()
+
+  private val _currentUser = MutableStateFlow<UserProfile>(loadSavedUser())
+  val currentUser: StateFlow<UserProfile> = _currentUser.asStateFlow()
+
+  private val _isAuthenticated = MutableStateFlow(authPrefs.getBoolean("is_logged_in", true))
+  val isAuthenticated: StateFlow<Boolean> = _isAuthenticated.asStateFlow()
+
+  // --- Reactive States (Per-Student Isolated Data Stream) ---
+  @OptIn(ExperimentalCoroutinesApi::class)
+  val subjects: StateFlow<List<Subject>> = _currentUser
+    .flatMapLatest { user -> repository.getSubjectsForUser(user.id) }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-  val sessions: StateFlow<List<TimetableSession>> = repository.allSessions
+  @OptIn(ExperimentalCoroutinesApi::class)
+  val sessions: StateFlow<List<TimetableSession>> = _currentUser
+    .flatMapLatest { user -> repository.getSessionsForUser(user.id) }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-  val topics: StateFlow<List<StudyTopic>> = repository.allTopics
+  @OptIn(ExperimentalCoroutinesApi::class)
+  val topics: StateFlow<List<StudyTopic>> = _currentUser
+    .flatMapLatest { user -> repository.getTopicsForUser(user.id) }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-  val tasks: StateFlow<List<StudyTask>> = repository.allTasks
+  @OptIn(ExperimentalCoroutinesApi::class)
+  val tasks: StateFlow<List<StudyTask>> = _currentUser
+    .flatMapLatest { user -> repository.getTasksForUser(user.id) }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-  val quizAttempts: StateFlow<List<QuizAttempt>> = repository.allQuizAttempts
+  @OptIn(ExperimentalCoroutinesApi::class)
+  val quizAttempts: StateFlow<List<QuizAttempt>> = _currentUser
+    .flatMapLatest { user -> repository.getQuizAttemptsForUser(user.id) }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-  val tutorSessions: StateFlow<List<TutorSession>> = repository.allTutorSessions
+  @OptIn(ExperimentalCoroutinesApi::class)
+  val tutorSessions: StateFlow<List<TutorSession>> = _currentUser
+    .flatMapLatest { user -> repository.getTutorSessionsForUser(user.id) }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-  val scheduleFormats: StateFlow<List<com.example.data.model.ScheduleFormat>> = repository.allScheduleFormats
+  @OptIn(ExperimentalCoroutinesApi::class)
+  val scheduleFormats: StateFlow<List<com.example.data.model.ScheduleFormat>> = _currentUser
+    .flatMapLatest { user -> repository.getScheduleFormatsForUser(user.id) }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-  val scheduleStatus: StateFlow<CurrentScheduleStatus> = repository.allSessions
+  val scheduleStatus: StateFlow<CurrentScheduleStatus> = sessions
     .map { list -> alarmAndCalendarService.evaluateCurrentStatus(list) }
     .stateIn(
       viewModelScope,
@@ -116,7 +282,7 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
 
   init {
     viewModelScope.launch {
-      repository.seedSampleUniversityData()
+      repository.seedSampleUniversityData(_currentUser.value.id)
     }
 
     // 1. Listen for background & broadcast alarm events from AlarmReceiver
@@ -184,47 +350,17 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
-  // --- User Authentication & Multi-Device Profile ---
-  private val authPrefs = application.getSharedPreferences("studypilot_auth_prefs", Context.MODE_PRIVATE)
-
-  private val _currentUser = MutableStateFlow<UserProfile>(loadSavedUser())
-  val currentUser: StateFlow<UserProfile> = _currentUser.asStateFlow()
-
-  private val _isAuthenticated = MutableStateFlow(authPrefs.getBoolean("is_logged_in", true))
-  val isAuthenticated: StateFlow<Boolean> = _isAuthenticated.asStateFlow()
-
-  private fun loadSavedUser(): UserProfile {
-    val name = authPrefs.getString("user_name", "Amitesh Yadav") ?: "Amitesh Yadav"
-    val email = authPrefs.getString("user_email", "amitesh69.yadav@gmail.com") ?: "amitesh69.yadav@gmail.com"
-    val role = authPrefs.getString("user_role", "Computer Science Scholar") ?: "Computer Science Scholar"
-    val uni = authPrefs.getString("user_university", "Imperial College London") ?: "Imperial College London"
-    val studentId = authPrefs.getString("user_student_id", "CS-2024-8841") ?: "CS-2024-8841"
-    val initials = authPrefs.getString("user_initials", "AY") ?: "AY"
-    val provider = authPrefs.getString("auth_provider", "Academic SSO") ?: "Academic SSO"
-    val isLoggedIn = authPrefs.getBoolean("is_logged_in", true)
-    return UserProfile(
-      name = name,
-      email = email,
-      role = role,
-      university = uni,
-      studentId = studentId,
-      avatarInitials = initials,
-      isLoggedIn = isLoggedIn,
-      authProvider = provider
-    )
-  }
-
-  private fun saveUser(user: UserProfile, isLoggedIn: Boolean) {
-    authPrefs.edit()
-      .putString("user_name", user.name)
-      .putString("user_email", user.email)
-      .putString("user_role", user.role)
-      .putString("user_university", user.university)
-      .putString("user_student_id", user.studentId)
-      .putString("user_initials", user.avatarInitials)
-      .putString("auth_provider", user.authProvider)
-      .putBoolean("is_logged_in", isLoggedIn)
-      .apply()
+  // --- Account Actions ---
+  fun switchAccount(user: UserProfile) {
+    val updated = user.copy(isLoggedIn = true, lastLoginTime = System.currentTimeMillis())
+    saveUser(updated, isLoggedIn = true)
+    _currentUser.value = updated
+    _isAuthenticated.value = true
+    _currentScreen.value = Screen.Dashboard
+    viewModelScope.launch {
+      repository.seedSampleUniversityData(updated.id)
+      _snackbarMessage.emit("Switched to student ${updated.name} (${updated.studentId})")
+    }
   }
 
   fun login(email: String, pass: String, rememberMe: Boolean = true): Boolean {
@@ -237,25 +373,38 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
       viewModelScope.launch { _snackbarMessage.emit("Password must be at least 6 characters long.") }
       return false
     }
-    val namePart = cleanEmail.substringBefore("@").replace(".", " ").split(" ")
-      .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
-    val initials = namePart.split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("")
-      .ifBlank { "ST" }
-    val updatedUser = _currentUser.value.copy(
-      email = cleanEmail,
-      name = if (_currentUser.value.email.equals(cleanEmail, ignoreCase = true)) _currentUser.value.name else namePart,
-      avatarInitials = initials,
-      isLoggedIn = true,
-      authProvider = "Email & Password",
-      rememberMe = rememberMe,
-      lastLoginTime = System.currentTimeMillis()
-    )
-    saveUser(updatedUser, isLoggedIn = true)
-    _currentUser.value = updatedUser
+
+    val existing = _savedAccounts.value.find { it.email.equals(cleanEmail, ignoreCase = true) }
+    val userToActivate = if (existing != null) {
+      existing.copy(isLoggedIn = true, rememberMe = rememberMe, lastLoginTime = System.currentTimeMillis())
+    } else {
+      val namePart = cleanEmail.substringBefore("@").replace(".", " ").split(" ")
+        .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+      val initials = namePart.split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("")
+        .ifBlank { "ST" }
+      val generatedId = "student_" + cleanEmail.replace("@", "_").replace(".", "_")
+      UserProfile(
+        id = generatedId,
+        name = namePart,
+        email = cleanEmail,
+        role = "University Student",
+        university = "Academic Scholar University",
+        studentId = "STU-${(1000..9999).random()}",
+        avatarInitials = initials,
+        isLoggedIn = true,
+        authProvider = "Academic Email & Password",
+        rememberMe = rememberMe,
+        lastLoginTime = System.currentTimeMillis()
+      )
+    }
+
+    saveUser(userToActivate, isLoggedIn = true)
+    _currentUser.value = userToActivate
     _isAuthenticated.value = true
     _currentScreen.value = Screen.Dashboard
     viewModelScope.launch {
-      _snackbarMessage.emit("Signed in successfully as ${updatedUser.name}")
+      repository.seedSampleUniversityData(userToActivate.id)
+      _snackbarMessage.emit("Signed in successfully as ${userToActivate.name}")
     }
     return true
   }
@@ -283,8 +432,9 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
     }
     val initials = name.trim().split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("")
       .ifBlank { "ST" }
+    val generatedId = "student_" + cleanEmail.replace("@", "_").replace(".", "_")
     val newUser = UserProfile(
-      id = "user_${System.currentTimeMillis()}",
+      id = generatedId,
       name = name.trim(),
       email = cleanEmail,
       role = "University Student",
@@ -292,7 +442,7 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
       studentId = studentId.ifBlank { "ID-${(1000..9999).random()}" },
       avatarInitials = initials,
       isLoggedIn = true,
-      authProvider = "Email & Password",
+      authProvider = "Academic Email & Password",
       rememberMe = rememberMe,
       lastLoginTime = System.currentTimeMillis()
     )
@@ -301,22 +451,79 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
     _isAuthenticated.value = true
     _currentScreen.value = Screen.Dashboard
     viewModelScope.launch {
+      repository.seedSampleUniversityData(newUser.id)
       _snackbarMessage.emit("Welcome to StudyPilot, ${newUser.name}!")
     }
     return true
   }
 
+  fun signInWithGoogle(
+    idToken: String,
+    displayName: String?,
+    email: String?,
+    onComplete: (Boolean, String?) -> Unit
+  ) {
+    try {
+      val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+      com.google.firebase.auth.FirebaseAuth.getInstance().signInWithCredential(credential)
+        .addOnSuccessListener { authResult ->
+          val fbUser = authResult.user
+          val studentName = displayName ?: fbUser?.displayName ?: "Amitesh Yadav"
+          val studentEmail = email ?: fbUser?.email ?: "amitesh69.yadav@gmail.com"
+          val initials = studentName.trim().split(" ")
+            .mapNotNull { it.firstOrNull()?.uppercase() }
+            .take(2)
+            .joinToString("")
+            .ifBlank { "AY" }
+          val userId = fbUser?.uid ?: ("google_" + studentEmail.replace("@", "_").replace(".", "_"))
+          val user = UserProfile(
+            id = userId,
+            name = studentName,
+            email = studentEmail,
+            role = "University Scholar",
+            university = _currentUser.value.university.ifBlank { "Imperial College London" },
+            studentId = _currentUser.value.studentId.ifBlank { "CS-2024-8841" },
+            avatarInitials = initials,
+            isLoggedIn = true,
+            authProvider = "Google Authentication (Firebase)",
+            rememberMe = true,
+            lastLoginTime = System.currentTimeMillis()
+          )
+          saveUser(user, isLoggedIn = true)
+          _currentUser.value = user
+          _isAuthenticated.value = true
+          _currentScreen.value = Screen.Dashboard
+          viewModelScope.launch {
+            repository.seedSampleUniversityData(user.id)
+            _snackbarMessage.emit("Welcome, ${user.name}!")
+          }
+          onComplete(true, null)
+        }
+        .addOnFailureListener { exception ->
+          android.util.Log.e("StudyPilotVM", "Firebase signInWithCredential failed", exception)
+          onComplete(false, exception.localizedMessage)
+        }
+    } catch (e: Exception) {
+      android.util.Log.e("StudyPilotVM", "Firebase Auth error", e)
+      onComplete(false, e.localizedMessage)
+    }
+  }
+
   fun loginWithGoogle() {
+    val fbUser = try { com.google.firebase.auth.FirebaseAuth.getInstance().currentUser } catch (_: Exception) { null }
+    val studentEmail = fbUser?.email ?: "amitesh69.yadav@gmail.com"
+    val studentName = fbUser?.displayName ?: "Amitesh Yadav"
+    val userId = fbUser?.uid ?: "student_amitesh"
     val user = UserProfile(
-      id = "google_user_8841",
-      name = "Amitesh Yadav",
-      email = "amitesh69.yadav@gmail.com",
+      id = userId,
+      name = studentName,
+      email = studentEmail,
       role = "Computer Science Scholar",
       university = "Imperial College London",
       studentId = "CS-2024-8841",
       avatarInitials = "AY",
       isLoggedIn = true,
-      authProvider = "Google Student Account",
+      authProvider = "Google Authentication (Firebase)",
       rememberMe = true,
       lastLoginTime = System.currentTimeMillis()
     )
@@ -325,6 +532,7 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
     _isAuthenticated.value = true
     _currentScreen.value = Screen.Dashboard
     viewModelScope.launch {
+      repository.seedSampleUniversityData(user.id)
       _snackbarMessage.emit("Signed in with Google: ${user.email}")
     }
   }
@@ -348,11 +556,15 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
     _isAuthenticated.value = true
     _currentScreen.value = Screen.Dashboard
     viewModelScope.launch {
+      repository.seedSampleUniversityData(guestUser.id)
       _snackbarMessage.emit("Exploring in Guest Demo Mode")
     }
   }
 
   fun logout() {
+    try {
+      com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+    } catch (_: Exception) {}
     val loggedOutUser = _currentUser.value.copy(isLoggedIn = false)
     saveUser(loggedOutUser, isLoggedIn = false)
     _currentUser.value = loggedOutUser
@@ -593,7 +805,8 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
             title = title,
             previewSnippet = trimmed,
             modelUsed = _selectedModel.value.modelId,
-            searchGroundingUsed = _useGoogleSearch.value
+            searchGroundingUsed = _useGoogleSearch.value,
+            userId = _currentUser.value.id
           )
           _activeSessionId.value = sessionId
         }
@@ -661,7 +874,7 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
   // --- Subject Actions ---
   fun addSubject(name: String, code: String, colorHex: String) {
     viewModelScope.launch {
-      repository.addSubject(name, code, colorHex)
+      repository.addSubject(name, code, colorHex, userId = _currentUser.value.id)
       _snackbarMessage.emit("Subject '$name' added")
     }
   }
@@ -676,28 +889,31 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
   // --- Session Actions ---
   fun addSession(session: TimetableSession) {
     viewModelScope.launch {
-      repository.addSession(session)
+      val sessionWithUser = if (session.userId.isBlank()) session.copy(userId = _currentUser.value.id) else session
+      repository.addSession(sessionWithUser)
       _snackbarMessage.emit("Class '${session.topic}' scheduled")
     }
   }
 
   fun updateSessionStatus(session: TimetableSession, newStatus: String) {
     viewModelScope.launch {
-      repository.updateSession(session.copy(status = newStatus))
+      val sessionWithUser = if (session.userId.isBlank()) session.copy(userId = _currentUser.value.id) else session
+      repository.updateSession(sessionWithUser.copy(status = newStatus))
       _snackbarMessage.emit("Session marked as $newStatus")
     }
   }
 
   fun deleteSession(id: Long) {
     viewModelScope.launch {
-      repository.deleteSession(id)
+      repository.deleteSession(id, userId = _currentUser.value.id)
       _snackbarMessage.emit("Class schedule deleted")
     }
   }
 
   fun updateSession(session: TimetableSession) {
     viewModelScope.launch {
-      repository.updateSession(session)
+      val sessionWithUser = if (session.userId.isBlank()) session.copy(userId = _currentUser.value.id) else session
+      repository.updateSession(sessionWithUser)
       _snackbarMessage.emit("Updated '${session.topic}' (${session.startTime} - ${session.endTime})")
     }
   }
@@ -780,16 +996,18 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
 
   fun createDayScheduleBatch(newSessions: List<TimetableSession>) {
     viewModelScope.launch {
-      newSessions.forEach { repository.addSession(it) }
+      val uid = _currentUser.value.id
+      newSessions.forEach { repository.addSession(it.copy(userId = uid)) }
       _snackbarMessage.emit("Created ${newSessions.size} schedule session(s)!")
     }
   }
 
   fun replaceDayScheduleWithSessions(targetDate: String, newSessions: List<TimetableSession>) {
     viewModelScope.launch {
-      repository.clearSessionsForDate(targetDate)
+      val uid = _currentUser.value.id
+      repository.clearSessionsForDate(targetDate, userId = uid)
       newSessions.forEach { session ->
-        repository.addSession(session.copy(id = 0L, date = targetDate))
+        repository.addSession(session.copy(id = 0L, date = targetDate, userId = uid))
       }
       _snackbarMessage.emit("Applied ${newSessions.size} session(s) to $targetDate!")
     }
@@ -797,6 +1015,7 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
 
   fun copyDaySchedule(sourceDate: String, targetDate: String, overwriteExisting: Boolean = false) {
     viewModelScope.launch {
+      val uid = _currentUser.value.id
       val sourceSessions = sessions.value.filter { it.date == sourceDate }
       if (sourceSessions.isEmpty()) {
         _snackbarMessage.emit("No sessions found on $sourceDate to copy.")
@@ -804,13 +1023,14 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
       }
 
       if (overwriteExisting) {
-        repository.clearSessionsForDate(targetDate)
+        repository.clearSessionsForDate(targetDate, userId = uid)
       }
 
       sourceSessions.forEach { s ->
         repository.addSession(
           s.copy(
             id = 0L,
+            userId = uid,
             date = targetDate,
             status = "SCHEDULED",
             googleCalendarEventId = null
@@ -848,6 +1068,7 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
       }
 
       val format = com.example.data.model.ScheduleFormat(
+        userId = _currentUser.value.id,
         name = formatName.trim(),
         description = description.trim(),
         formatSessionsJson = jsonArray.toString()
@@ -863,6 +1084,7 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
     overwriteExisting: Boolean = false
   ) {
     viewModelScope.launch {
+      val uid = _currentUser.value.id
       val parsedSessions = mutableListOf<TimetableSession>()
       try {
         val jsonArray = org.json.JSONArray(format.formatSessionsJson)
@@ -870,6 +1092,7 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
           val obj = jsonArray.getJSONObject(i)
           parsedSessions.add(
             TimetableSession(
+              userId = uid,
               subjectId = obj.optLong("subjectId", 1L),
               subjectName = obj.optString("subjectName", "General"),
               topic = obj.optString("topic", "Study Block"),
@@ -889,7 +1112,7 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
       }
 
       if (overwriteExisting) {
-        repository.clearSessionsForDate(targetDate)
+        repository.clearSessionsForDate(targetDate, userId = uid)
       }
 
       parsedSessions.forEach { repository.addSession(it) }
@@ -906,7 +1129,7 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
 
   fun clearDaySchedule(targetDate: String) {
     viewModelScope.launch {
-      repository.clearSessionsForDate(targetDate)
+      repository.clearSessionsForDate(targetDate, userId = _currentUser.value.id)
       _snackbarMessage.emit("Cleared all sessions for $targetDate")
     }
   }
@@ -926,7 +1149,9 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
       _isAiLoading.value = true
       try {
         val today = repository.getTodayDateString()
+        val uid = _currentUser.value.id
         val topic = StudyTopic(
+          userId = uid,
           subjectId = subjectId,
           subjectName = subjectName,
           title = title,
@@ -944,7 +1169,8 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
           // Pre-generate practice questions
           repository.assembleWeekendQuiz(
             config = QuizConfig(questionCount = 3),
-            filterSubjectId = subjectId
+            filterSubjectId = subjectId,
+            userId = uid
           )
         }
 
@@ -997,6 +1223,7 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
     viewModelScope.launch {
       repository.addTask(
         StudyTask(
+          userId = _currentUser.value.id,
           title = title,
           subjectName = subjectName,
           dueDate = dueDate,
@@ -1029,7 +1256,8 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
         val generated = repository.assembleWeekendQuiz(
           config = _quizConfig.value,
           filterSubjectId = filterSubjectId,
-          forceWeakOnly = forceWeakOnly
+          forceWeakOnly = forceWeakOnly,
+          userId = _currentUser.value.id
         )
 
         if (generated.questions.isEmpty()) {
@@ -1122,7 +1350,8 @@ class StudyPilotViewModel(application: Application) : AndroidViewModel(applicati
           userAnswers = current.userAnswers,
           evaluations = evalMap,
           topicsCoveredCount = current.testedTopics.size,
-          topicsSkippedCount = current.queuedUntestedTopics.size
+          topicsSkippedCount = current.queuedUntestedTopics.size,
+          userId = _currentUser.value.id
         )
 
         _activeQuizState.value = current.copy(

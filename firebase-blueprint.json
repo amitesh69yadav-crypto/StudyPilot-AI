@@ -1,0 +1,140 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information for authenticated student.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth user ID" },
+        "name": { "type": "string", "description": "Student display name" },
+        "email": { "type": "string", "format": "email", "description": "Student email address" },
+        "university": { "type": "string", "description": "Student university" },
+        "studentId": { "type": "string", "description": "Student roll or ID number" },
+        "role": { "type": "string", "description": "Academic level or year" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp" }
+      },
+      "required": ["uid", "name", "email"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Academic course or subject tracked by the student.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique subject identifier" },
+        "userId": { "type": "string", "description": "Owner student user ID" },
+        "name": { "type": "string", "description": "Subject title" },
+        "code": { "type": "string", "description": "Subject course code" },
+        "colorHex": { "type": "string", "description": "Theme color hex code" },
+        "professor": { "type": "string", "description": "Professor name" },
+        "room": { "type": "string", "description": "Classroom or hall" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "userId", "name"]
+    },
+    "StudySession": {
+      "title": "StudySession",
+      "description": "Scheduled or completed study or lecture event in the timetable.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique session identifier" },
+        "userId": { "type": "string", "description": "Owner student user ID" },
+        "subjectId": { "type": "string", "description": "Associated subject ID" },
+        "subjectName": { "type": "string", "description": "Subject display name" },
+        "topic": { "type": "string", "description": "Topic or focus of the session" },
+        "date": { "type": "string", "description": "Date formatted YYYY-MM-DD" },
+        "startTime": { "type": "string", "description": "Start time HH:mm" },
+        "endTime": { "type": "string", "description": "End time HH:mm" },
+        "durationMinutes": { "type": "integer", "description": "Duration in minutes" },
+        "type": { "type": "string", "description": "Type of event: LECTURE, STUDY, LAB, REVISION" },
+        "status": { "type": "string", "description": "Session status: SCHEDULED, ACTIVE, COMPLETED, MISSED" },
+        "notes": { "type": "string", "description": "Session notes" },
+        "alarmEnabled": { "type": "boolean", "description": "Whether alarm alert is enabled" },
+        "isGoogleSynced": { "type": "boolean", "description": "Google Calendar sync status" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "userId", "date", "startTime", "endTime"]
+    },
+    "StudyTopic": {
+      "title": "StudyTopic",
+      "description": "Syllabus topic tracked with student mastery level.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique topic identifier" },
+        "userId": { "type": "string", "description": "Owner student user ID" },
+        "subjectId": { "type": "string", "description": "Associated subject ID" },
+        "subjectName": { "type": "string", "description": "Subject display name" },
+        "title": { "type": "string", "description": "Topic title" },
+        "dateStudied": { "type": "string", "description": "Date studied YYYY-MM-DD" },
+        "masteryLevel": { "type": "string", "description": "Level: NOT_STARTED, LEARNING, REVIEWED, MASTERED, STRUGGLING" },
+        "descriptionNotes": { "type": "string", "description": "Lecture notes and key concepts" },
+        "tags": { "type": "string", "description": "Comma separated tags" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "userId", "title"]
+    },
+    "StudyTask": {
+      "title": "StudyTask",
+      "description": "Academic assignment, project milestone, or study task.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique task identifier" },
+        "userId": { "type": "string", "description": "Owner student user ID" },
+        "title": { "type": "string", "description": "Task title" },
+        "subjectId": { "type": "string", "description": "Subject ID" },
+        "subjectName": { "type": "string", "description": "Subject display name" },
+        "dueDate": { "type": "string", "description": "Due date YYYY-MM-DD" },
+        "priority": { "type": "string", "description": "Priority: LOW, MEDIUM, HIGH, URGENT" },
+        "isCompleted": { "type": "boolean", "description": "Completion flag" },
+        "description": { "type": "string", "description": "Task details" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "userId", "title"]
+    },
+    "QuizAttempt": {
+      "title": "QuizAttempt",
+      "description": "Weekend revision quiz attempt results.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique attempt identifier" },
+        "userId": { "type": "string", "description": "Owner student user ID" },
+        "subjectId": { "type": "string", "description": "Subject ID" },
+        "subjectName": { "type": "string", "description": "Subject display name" },
+        "topicId": { "type": "string", "description": "Topic ID" },
+        "date": { "type": "string", "description": "Date of attempt" },
+        "scorePercentage": { "type": "integer", "description": "Score percentage 0-100" },
+        "totalQuestions": { "type": "integer", "description": "Total quiz questions" },
+        "correctAnswers": { "type": "integer", "description": "Number of correct answers" },
+        "timeTakenSeconds": { "type": "integer", "description": "Time taken in seconds" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "userId", "scorePercentage"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document owned by the student."
+    },
+    "/users/{userId}/subjects/{subjectId}": {
+      "schema": "Subject",
+      "description": "Subject subcollection owned by the student."
+    },
+    "/users/{userId}/sessions/{sessionId}": {
+      "schema": "StudySession",
+      "description": "Timetable sessions subcollection owned by the student."
+    },
+    "/users/{userId}/topics/{topicId}": {
+      "schema": "StudyTopic",
+      "description": "Topics subcollection owned by the student."
+    },
+    "/users/{userId}/tasks/{taskId}": {
+      "schema": "StudyTask",
+      "description": "Academic tasks subcollection owned by the student."
+    },
+    "/users/{userId}/quizAttempts/{attemptId}": {
+      "schema": "QuizAttempt",
+      "description": "Quiz attempts subcollection owned by the student."
+    }
+  }
+}

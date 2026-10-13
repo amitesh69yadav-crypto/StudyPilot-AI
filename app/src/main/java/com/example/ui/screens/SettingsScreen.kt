@@ -23,6 +23,14 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -54,6 +62,10 @@ import com.example.data.model.Subject
 import com.example.ui.components.SectionHeader
 import com.example.ui.theme.CyanAccent
 import com.example.ui.theme.EmeraldSuccess
+import com.example.ui.theme.PaletteCreamIvory
+import com.example.ui.theme.PaletteDeepSage
+import com.example.ui.theme.PaletteMediumSage
+import com.example.ui.theme.PalettePaleCeladon
 import com.example.ui.viewmodel.StudyPilotViewModel
 
 @Composable
@@ -62,6 +74,7 @@ fun SettingsScreen(
 ) {
   val subjects by viewModel.subjects.collectAsState()
   val currentUser by viewModel.currentUser.collectAsState()
+  val savedAccounts by viewModel.savedAccounts.collectAsState()
   var showAddSubjectDialog by remember { mutableStateOf(false) }
   var showEditProfileDialog by remember { mutableStateOf(false) }
 
@@ -75,14 +88,189 @@ fun SettingsScreen(
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
-    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 32.dp)
+    contentPadding = PaddingValues(top = 10.dp, bottom = 32.dp)
   ) {
     // 0. Account Profile & Device Sync Card
     item {
       Card(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 8.dp),
+          .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+      ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+          // Top Row: Avatar + Student Details + Active Badge
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(14.dp),
+              modifier = Modifier.weight(1f)
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(48.dp)
+                  .clip(CircleShape)
+                  .background(PaletteDeepSage),
+                contentAlignment = Alignment.Center
+              ) {
+                Text(
+                  text = currentUser.avatarInitials,
+                  fontWeight = FontWeight.ExtraBold,
+                  color = PaletteCreamIvory,
+                  fontSize = 16.sp
+                )
+              }
+              Column(modifier = Modifier.weight(1f)) {
+                Text(
+                  text = currentUser.name,
+                  style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                  color = MaterialTheme.colorScheme.onSurface,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                  text = currentUser.email,
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                  text = "${currentUser.university} • ${currentUser.studentId}",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = PaletteDeepSage,
+                  fontWeight = FontWeight.SemiBold,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
+                )
+              }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Surface(
+              shape = RoundedCornerShape(20.dp),
+              color = EmeraldSuccess.copy(alpha = 0.12f),
+              border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldSuccess.copy(alpha = 0.35f))
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+              ) {
+                Box(
+                  modifier = Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(EmeraldSuccess)
+                )
+                Text(
+                  text = "Active",
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = EmeraldSuccess,
+                  maxLines = 1,
+                  softWrap = false
+                )
+              }
+            }
+          }
+
+          Spacer(modifier = Modifier.height(14.dp))
+
+          // Account Action Buttons: Evenly weighted & styled
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+          ) {
+            FilledTonalButton(
+              onClick = {
+                editName = currentUser.name
+                editEmail = currentUser.email
+                editUniversity = currentUser.university
+                editRole = currentUser.role
+                showEditProfileDialog = true
+              },
+              shape = RoundedCornerShape(12.dp),
+              colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = PalettePaleCeladon,
+                contentColor = PaletteDeepSage
+              ),
+              modifier = Modifier
+                .weight(1f)
+                .height(42.dp)
+            ) {
+              Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Edit Profile", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+
+            OutlinedButton(
+              onClick = { viewModel.logout() },
+              shape = RoundedCornerShape(12.dp),
+              border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
+              colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.error
+              ),
+              modifier = Modifier
+                .weight(1f)
+                .height(42.dp)
+            ) {
+              Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Sign Out", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+          }
+
+          Spacer(modifier = Modifier.height(12.dp))
+
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Row(
+              modifier = Modifier.padding(10.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              Icon(
+                Icons.Default.Devices,
+                contentDescription = null,
+                tint = PaletteDeepSage,
+                modifier = Modifier.size(20.dp)
+              )
+              Column(modifier = Modifier.weight(1f)) {
+                Text(
+                  text = "Laptop + Mobile Sync (${currentUser.authProvider})",
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 12.sp,
+                  color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                  text = "Dual responsive mode keeps coursework and alarms in sync.",
+                  fontSize = 11.sp,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 0.5. Student Account Switcher (Strict Per-Student Data Isolation)
+    item {
+      Card(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 16.dp, vertical = 6.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -93,119 +281,134 @@ fun SettingsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-              Box(
-                modifier = Modifier
-                  .size(48.dp)
-                  .clip(CircleShape)
-                  .background(com.example.ui.theme.PaletteDeepSage),
-                contentAlignment = Alignment.Center
-              ) {
-                Text(
-                  text = currentUser.avatarInitials,
-                  fontWeight = FontWeight.ExtraBold,
-                  color = com.example.ui.theme.PaletteCreamIvory,
-                  fontSize = 16.sp
-                )
-              }
-              Column {
-                Text(
-                  text = currentUser.name,
-                  style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                  color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                  text = currentUser.email,
-                  style = MaterialTheme.typography.bodySmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                  text = "${currentUser.university} • ${currentUser.studentId}",
-                  style = MaterialTheme.typography.labelSmall,
-                  color = com.example.ui.theme.PaletteDeepSage,
-                  fontWeight = FontWeight.SemiBold
-                )
-              }
+            Column {
+              Text(
+                text = "Student Profiles (${savedAccounts.size})",
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+              )
+              Text(
+                text = "Isolated profiles prevent clash between students",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
             }
-
             Surface(
               shape = RoundedCornerShape(8.dp),
-              color = EmeraldSuccess.copy(alpha = 0.15f),
-              border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldSuccess.copy(alpha = 0.4f))
+              color = MaterialTheme.colorScheme.primaryContainer
             ) {
               Text(
-                text = "Active Session",
+                text = "Zero-Clash",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = EmeraldSuccess,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
               )
             }
           }
 
-          Spacer(modifier = Modifier.height(14.dp))
+          Spacer(modifier = Modifier.height(12.dp))
 
-          // Account Management Buttons
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-          ) {
-            OutlinedButton(
-              onClick = {
-                editName = currentUser.name
-                editEmail = currentUser.email
-                editUniversity = currentUser.university
-                editRole = currentUser.role
-                showEditProfileDialog = true
-              },
-              shape = RoundedCornerShape(10.dp),
-              border = androidx.compose.foundation.BorderStroke(1.dp, com.example.ui.theme.PaletteMediumSage),
-              modifier = Modifier
-                .weight(1f)
-                .height(38.dp)
-            ) {
-              Text("Edit Profile", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
+          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            savedAccounts.forEach { account ->
+              val isCurrent = account.id == currentUser.id
+              Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (isCurrent) PalettePaleCeladon.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                border = androidx.compose.foundation.BorderStroke(
+                  1.dp,
+                  if (isCurrent) PaletteMediumSage else MaterialTheme.colorScheme.outlineVariant
+                ),
+                modifier = Modifier.fillMaxWidth()
+              ) {
+                Row(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f)
+                  ) {
+                    Box(
+                      modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(if (isCurrent) PaletteDeepSage else MaterialTheme.colorScheme.outline),
+                      contentAlignment = Alignment.Center
+                    ) {
+                      Text(
+                        text = account.avatarInitials,
+                        fontWeight = FontWeight.Bold,
+                        color = PaletteCreamIvory,
+                        fontSize = 13.sp
+                      )
+                    }
+                    Column {
+                      Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                          text = account.name,
+                          fontWeight = FontWeight.Bold,
+                          fontSize = 13.sp,
+                          color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (isCurrent) {
+                          Spacer(modifier = Modifier.width(6.dp))
+                          Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = EmeraldSuccess.copy(alpha = 0.15f)
+                          ) {
+                            Text(
+                              text = "Active",
+                              fontSize = 10.sp,
+                              fontWeight = FontWeight.Bold,
+                              color = EmeraldSuccess,
+                              modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                          }
+                        }
+                      }
+                      Text(
+                        text = "${account.university} • ${account.studentId}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+                  }
 
-            Button(
-              onClick = { viewModel.logout() },
-              colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer
-              ),
-              shape = RoundedCornerShape(10.dp),
-              modifier = Modifier
-                .weight(1f)
-                .height(38.dp)
-            ) {
-              Text("Sign Out / Switch", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                  if (!isCurrent) {
+                    FilledTonalButton(
+                      onClick = { viewModel.switchAccount(account) },
+                      shape = RoundedCornerShape(8.dp),
+                      contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                      modifier = Modifier.height(34.dp)
+                    ) {
+                      Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(14.dp))
+                      Spacer(modifier = Modifier.width(4.dp))
+                      Text("Switch", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                  }
+                }
+              }
             }
           }
 
-          Spacer(modifier = Modifier.height(12.dp))
+          Spacer(modifier = Modifier.height(10.dp))
 
-          Surface(
+          OutlinedButton(
+            onClick = { viewModel.logout() },
             shape = RoundedCornerShape(10.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(40.dp)
           ) {
-            Column(modifier = Modifier.padding(10.dp)) {
-              Text(
-                text = "💻 Laptop + 📱 Mobile Dual Mode (${currentUser.authProvider})",
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurface
-              )
-              Spacer(modifier = Modifier.height(2.dp))
-              Text(
-                text = "Adaptive responsive UI enables side-by-side desktop navigation on your laptop and compact touch navigation on your mobile device.",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-            }
+            Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Register / Sign In Another Student", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
           }
         }
       }

@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.Flow
 interface StudyPilotDao {
 
   // --- Subjects ---
+  @Query("SELECT * FROM subjects WHERE userId = :userId ORDER BY name ASC")
+  fun getSubjectsForUser(userId: String): Flow<List<Subject>>
+
   @Query("SELECT * FROM subjects ORDER BY name ASC")
   fun getAllSubjects(): Flow<List<Subject>>
 
@@ -30,6 +33,15 @@ interface StudyPilotDao {
   suspend fun deleteSubject(subject: Subject)
 
   // --- Timetable Sessions ---
+  @Query("SELECT * FROM timetable_sessions WHERE userId = :userId ORDER BY date ASC, startTime ASC")
+  fun getSessionsForUser(userId: String): Flow<List<TimetableSession>>
+
+  @Query("SELECT * FROM timetable_sessions WHERE userId = :userId ORDER BY date ASC, startTime ASC")
+  suspend fun getSessionsListForUser(userId: String): List<TimetableSession>
+
+  @Query("SELECT * FROM timetable_sessions WHERE userId = :userId AND date = :date ORDER BY startTime ASC")
+  fun getSessionsForDateAndUser(userId: String, date: String): Flow<List<TimetableSession>>
+
   @Query("SELECT * FROM timetable_sessions ORDER BY date ASC, startTime ASC")
   fun getAllSessions(): Flow<List<TimetableSession>>
 
@@ -49,6 +61,12 @@ interface StudyPilotDao {
   suspend fun deleteSessionById(id: Long)
 
   // --- Study Topics ---
+  @Query("SELECT * FROM study_topics WHERE userId = :userId ORDER BY dateStudied DESC, id DESC")
+  fun getTopicsForUser(userId: String): Flow<List<StudyTopic>>
+
+  @Query("SELECT * FROM study_topics WHERE userId = :userId AND subjectId = :subjectId")
+  fun getTopicsForSubjectAndUser(userId: String, subjectId: Long): Flow<List<StudyTopic>>
+
   @Query("SELECT * FROM study_topics ORDER BY dateStudied DESC, id DESC")
   fun getAllTopics(): Flow<List<StudyTopic>>
 
@@ -84,6 +102,9 @@ interface StudyPilotDao {
   suspend fun insertQuestion(question: QuizQuestion): Long
 
   // --- Quiz Attempts ---
+  @Query("SELECT * FROM quiz_attempts WHERE userId = :userId ORDER BY id DESC")
+  fun getQuizAttemptsForUser(userId: String): Flow<List<QuizAttempt>>
+
   @Query("SELECT * FROM quiz_attempts ORDER BY id DESC")
   fun getAllQuizAttempts(): Flow<List<QuizAttempt>>
 
@@ -91,6 +112,9 @@ interface StudyPilotDao {
   suspend fun insertQuizAttempt(attempt: QuizAttempt): Long
 
   // --- Study Tasks & Exams ---
+  @Query("SELECT * FROM study_tasks WHERE userId = :userId ORDER BY dueDate ASC")
+  fun getTasksForUser(userId: String): Flow<List<StudyTask>>
+
   @Query("SELECT * FROM study_tasks ORDER BY dueDate ASC")
   fun getAllTasks(): Flow<List<StudyTask>>
 
@@ -117,6 +141,12 @@ interface StudyPilotDao {
   suspend fun insertTasks(tasks: List<StudyTask>)
 
   // --- AI Tutor Sessions & Messages ---
+  @Query("SELECT * FROM tutor_sessions WHERE userId = :userId ORDER BY lastUpdatedAt DESC")
+  fun getTutorSessionsForUser(userId: String): Flow<List<TutorSession>>
+
+  @Query("SELECT * FROM tutor_sessions WHERE userId = :userId AND subjectId = :subjectId ORDER BY lastUpdatedAt DESC")
+  fun getTutorSessionsForSubjectAndUser(userId: String, subjectId: Long): Flow<List<TutorSession>>
+
   @Query("SELECT * FROM tutor_sessions ORDER BY lastUpdatedAt DESC")
   fun getAllTutorSessions(): Flow<List<TutorSession>>
 
@@ -157,6 +187,9 @@ interface StudyPilotDao {
   suspend fun clearAllTutorMessages()
 
   // --- Schedule Formats / Templates ---
+  @Query("SELECT * FROM schedule_formats WHERE userId = :userId ORDER BY createdAt ASC")
+  fun getScheduleFormatsForUser(userId: String): Flow<List<com.example.data.model.ScheduleFormat>>
+
   @Query("SELECT * FROM schedule_formats ORDER BY createdAt ASC")
   fun getAllScheduleFormats(): Flow<List<com.example.data.model.ScheduleFormat>>
 
@@ -168,5 +201,8 @@ interface StudyPilotDao {
 
   @Query("DELETE FROM timetable_sessions WHERE date = :date")
   suspend fun deleteSessionsForDate(date: String)
+
+  @Query("DELETE FROM timetable_sessions WHERE userId = :userId AND date = :date")
+  suspend fun deleteSessionsForDateAndUser(userId: String, date: String)
 }
 

@@ -37,29 +37,113 @@ class StudyPilotRepository(
 
   fun getTodayDateString(): String = dateFormat.format(Date())
 
+  fun getSubjectsForUser(userId: String): Flow<List<Subject>> = dao.getSubjectsForUser(userId)
+  fun getSessionsForUser(userId: String): Flow<List<TimetableSession>> = dao.getSessionsForUser(userId)
+  fun getTopicsForUser(userId: String): Flow<List<StudyTopic>> = dao.getTopicsForUser(userId)
+  fun getTasksForUser(userId: String): Flow<List<StudyTask>> = dao.getTasksForUser(userId)
+  fun getQuizAttemptsForUser(userId: String): Flow<List<QuizAttempt>> = dao.getQuizAttemptsForUser(userId)
+  fun getTutorSessionsForUser(userId: String): Flow<List<TutorSession>> = dao.getTutorSessionsForUser(userId)
+  fun getScheduleFormatsForUser(userId: String): Flow<List<com.example.data.model.ScheduleFormat>> = dao.getScheduleFormatsForUser(userId)
+
+  private fun syncToFirestore(path: String, data: Map<String, Any?>) {
+    try {
+      val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+      val currentUser = auth.currentUser
+      if (currentUser != null) {
+        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        firestore.document(path).set(data)
+      }
+    } catch (_: Exception) {
+      // Offline or unauthenticated fallback
+    }
+  }
+
+  private fun deleteFromFirestore(path: String) {
+    try {
+      val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+      val currentUser = auth.currentUser
+      if (currentUser != null) {
+        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        firestore.document(path).delete()
+      }
+    } catch (_: Exception) {
+      // Offline fallback
+    }
+  }
+
   // --- CRUD Operations ---
-  suspend fun addSubject(name: String, code: String, colorHex: String): Long {
-    return dao.insertSubject(Subject(name = name, code = code, colorHex = colorHex))
+  suspend fun addSubject(name: String, code: String, colorHex: String, userId: String = ""): Long {
+    val id = dao.insertSubject(Subject(userId = userId, name = name, code = code, colorHex = colorHex))
+    if (userId.isNotBlank()) {
+      syncToFirestore("users/$userId/subjects/$id", mapOf(
+        "id" to id.toString(),
+        "userId" to userId,
+        "name" to name,
+        "code" to code,
+        "colorHex" to colorHex,
+        "createdAt" to System.currentTimeMillis()
+      ))
+    }
+    return id
   }
 
   suspend fun deleteSubject(subject: Subject) {
     dao.deleteSubject(subject)
+    if (subject.userId.isNotBlank()) {
+      deleteFromFirestore("users/${subject.userId}/subjects/${subject.id}")
+    }
   }
 
   suspend fun addSession(session: TimetableSession): Long {
-    return dao.insertSession(session)
+    val id = dao.insertSession(session)
+    if (session.userId.isNotBlank()) {
+      syncToFirestore("users/${session.userId}/sessions/$id", mapOf(
+        "id" to id.toString(),
+        "userId" to session.userId,
+        "subjectId" to session.subjectId.toString(),
+        "subjectName" to session.subjectName,
+        "topic" to session.topic,
+        "date" to session.date,
+        "startTime" to session.startTime,
+        "endTime" to session.endTime,
+        "status" to session.status,
+        "alarmEnabled" to session.isAlarmEnabled
+      ))
+    }
+    return id
   }
 
   suspend fun updateSession(session: TimetableSession) {
     dao.updateSession(session)
+    if (session.userId.isNotBlank()) {
+      syncToFirestore("users/${session.userId}/sessions/${session.id}", mapOf(
+        "id" to session.id.toString(),
+        "userId" to session.userId,
+        "subjectId" to session.subjectId.toString(),
+        "subjectName" to session.subjectName,
+        "topic" to session.topic,
+        "date" to session.date,
+        "startTime" to session.startTime,
+        "endTime" to session.endTime,
+        "status" to session.status,
+        "alarmEnabled" to session.isAlarmEnabled
+      ))
+    }
   }
 
-  suspend fun deleteSession(id: Long) {
+  suspend fun deleteSession(id: Long, userId: String = "") {
     dao.deleteSessionById(id)
+    if (userId.isNotBlank()) {
+      deleteFromFirestore("users/$userId/sessions/$id")
+    }
   }
 
-  suspend fun clearSessionsForDate(date: String) {
-    dao.deleteSessionsForDate(date)
+  suspend fun clearSessionsForDate(date: String, userId: String = "") {
+    if (userId.isNotBlank()) {
+      dao.deleteSessionsForDateAndUser(userId, date)
+    } else {
+      dao.deleteSessionsForDate(date)
+    }
   }
 
   suspend fun addScheduleFormat(format: com.example.data.model.ScheduleFormat): Long {
@@ -70,29 +154,82 @@ class StudyPilotRepository(
     dao.deleteScheduleFormatById(id)
   }
 
-
   suspend fun addTopic(topic: StudyTopic): Long {
-    return dao.insertTopic(topic)
+    val id = dao.insertTopic(topic)
+    if (topic.userId.isNotBlank()) {
+      syncToFirestore("users/${topic.userId}/topics/$id", mapOf(
+        "id" to id.toString(),
+        "userId" to topic.userId,
+        "subjectId" to topic.subjectId.toString(),
+        "subjectName" to topic.subjectName,
+        "title" to topic.title,
+        "dateStudied" to topic.dateStudied,
+        "masteryLevel" to topic.masteryLevel,
+        "descriptionNotes" to topic.descriptionNotes
+      ))
+    }
+    return id
   }
 
   suspend fun updateTopic(topic: StudyTopic) {
     dao.updateTopic(topic)
+    if (topic.userId.isNotBlank()) {
+      syncToFirestore("users/${topic.userId}/topics/${topic.id}", mapOf(
+        "id" to topic.id.toString(),
+        "userId" to topic.userId,
+        "subjectId" to topic.subjectId.toString(),
+        "subjectName" to topic.subjectName,
+        "title" to topic.title,
+        "dateStudied" to topic.dateStudied,
+        "masteryLevel" to topic.masteryLevel,
+        "descriptionNotes" to topic.descriptionNotes
+      ))
+    }
   }
 
-  suspend fun deleteTopic(id: Long) {
+  suspend fun deleteTopic(id: Long, userId: String = "") {
     dao.deleteTopicById(id)
+    if (userId.isNotBlank()) {
+      deleteFromFirestore("users/$userId/topics/$id")
+    }
   }
 
   suspend fun addTask(task: StudyTask): Long {
-    return dao.insertTask(task)
+    val id = dao.insertTask(task)
+    if (task.userId.isNotBlank()) {
+      syncToFirestore("users/${task.userId}/tasks/$id", mapOf(
+        "id" to id.toString(),
+        "userId" to task.userId,
+        "title" to task.title,
+        "subjectName" to task.subjectName,
+        "dueDate" to task.dueDate,
+        "isCompleted" to task.isCompleted,
+        "priority" to task.priority
+      ))
+    }
+    return id
   }
 
   suspend fun updateTask(task: StudyTask) {
     dao.updateTask(task)
+    if (task.userId.isNotBlank()) {
+      syncToFirestore("users/${task.userId}/tasks/${task.id}", mapOf(
+        "id" to task.id.toString(),
+        "userId" to task.userId,
+        "title" to task.title,
+        "subjectName" to task.subjectName,
+        "dueDate" to task.dueDate,
+        "isCompleted" to task.isCompleted,
+        "priority" to task.priority
+      ))
+    }
   }
 
-  suspend fun deleteTask(id: Long) {
+  suspend fun deleteTask(id: Long, userId: String = "") {
     dao.deleteTaskById(id)
+    if (userId.isNotBlank()) {
+      deleteFromFirestore("users/$userId/tasks/$id")
+    }
   }
 
   // --- AI Summarization & Chat ---
@@ -132,9 +269,11 @@ class StudyPilotRepository(
     title: String,
     previewSnippet: String,
     modelUsed: String,
-    searchGroundingUsed: Boolean
+    searchGroundingUsed: Boolean,
+    userId: String = ""
   ): Long {
     val session = TutorSession(
+      userId = userId,
       subjectId = subjectId,
       subjectName = subjectName,
       title = title,
@@ -145,7 +284,17 @@ class StudyPilotRepository(
       createdAt = System.currentTimeMillis(),
       lastUpdatedAt = System.currentTimeMillis()
     )
-    return dao.insertTutorSession(session)
+    val id = dao.insertTutorSession(session)
+    if (userId.isNotBlank()) {
+      syncToFirestore("users/$userId/tutorSessions/$id", mapOf(
+        "id" to id.toString(),
+        "userId" to userId,
+        "title" to title,
+        "subjectName" to subjectName,
+        "createdAt" to System.currentTimeMillis()
+      ))
+    }
+    return id
   }
 
   suspend fun saveTutorMessage(
@@ -206,9 +355,14 @@ class StudyPilotRepository(
   suspend fun assembleWeekendQuiz(
     config: QuizConfig,
     filterSubjectId: Long? = null,
-    forceWeakOnly: Boolean = false
+    forceWeakOnly: Boolean = false,
+    userId: String = ""
   ): GeneratedQuiz {
-    val allTopicsList = dao.getAllTopics().first()
+    val allTopicsList = if (userId.isNotBlank()) {
+      dao.getTopicsForUser(userId).first()
+    } else {
+      dao.getAllTopics().first()
+    }
     if (allTopicsList.isEmpty()) {
       return GeneratedQuiz(emptyList(), emptyList(), emptyList(), isAllCovered = true)
     }
@@ -312,7 +466,8 @@ class StudyPilotRepository(
     userAnswers: Map<Long, String>,
     evaluations: Map<Long, EvaluationResult>,
     topicsCoveredCount: Int,
-    topicsSkippedCount: Int
+    topicsSkippedCount: Int,
+    userId: String = ""
   ): QuizAttempt {
     val total = questions.size
     val correctCount = questions.count { q ->
@@ -370,6 +525,7 @@ class StudyPilotRepository(
     }
 
     val attempt = QuizAttempt(
+      userId = userId,
       title = title,
       dateAttempted = dateTimeFormat.format(Date()),
       totalQuestions = total,
@@ -380,18 +536,47 @@ class StudyPilotRepository(
       detailsJson = ""
     )
     val id = dao.insertQuizAttempt(attempt)
+    if (userId.isNotBlank()) {
+      syncToFirestore("users/$userId/quizAttempts/$id", mapOf(
+        "id" to id.toString(),
+        "userId" to userId,
+        "scorePercentage" to scorePercentage,
+        "totalQuestions" to total,
+        "correctAnswers" to correctCount
+      ))
+    }
     return attempt.copy(id = id)
   }
 
   // --- Seed Initial University Data ---
-  suspend fun seedSampleUniversityData() {
-    val existing = dao.getAllSubjects().first()
+  suspend fun seedSampleUniversityData(userId: String = "") {
+    val targetUserId = userId.ifBlank { "student_amitesh" }
+    val existing = dao.getSubjectsForUser(targetUserId).first()
     if (existing.isNotEmpty()) return
 
-    val csSub = Subject(name = "Data Structures & Algorithms", code = "CS201", colorHex = "#D86343")
-    val mathSub = Subject(name = "Linear Algebra & Calculus", code = "MATH220", colorHex = "#F69176")
-    val physSub = Subject(name = "Classical & Quantum Physics", code = "PHYS140", colorHex = "#EBCBB0")
-    val engSub = Subject(name = "Software Engineering Principles", code = "CS310", colorHex = "#E9F4EE")
+    val isMed = targetUserId.contains("sarah") || targetUserId.contains("med")
+    val isEng = targetUserId.contains("marcus") || targetUserId.contains("eng")
+
+    val csSub = when {
+      isMed -> Subject(userId = targetUserId, name = "Human Physiology & Anatomy", code = "MED101", colorHex = "#D86343")
+      isEng -> Subject(userId = targetUserId, name = "Thermodynamics & Fluids", code = "ME201", colorHex = "#D86343")
+      else -> Subject(userId = targetUserId, name = "Data Structures & Algorithms", code = "CS201", colorHex = "#D86343")
+    }
+    val mathSub = when {
+      isMed -> Subject(userId = targetUserId, name = "Biochemistry & Genetics", code = "BIO220", colorHex = "#F69176")
+      isEng -> Subject(userId = targetUserId, name = "Materials Science & Statics", code = "ME210", colorHex = "#F69176")
+      else -> Subject(userId = targetUserId, name = "Linear Algebra & Calculus", code = "MATH220", colorHex = "#F69176")
+    }
+    val physSub = when {
+      isMed -> Subject(userId = targetUserId, name = "Medical Pharmacology", code = "PHARM310", colorHex = "#EBCBB0")
+      isEng -> Subject(userId = targetUserId, name = "Robotics & Control Systems", code = "ME340", colorHex = "#EBCBB0")
+      else -> Subject(userId = targetUserId, name = "Classical & Quantum Physics", code = "PHYS140", colorHex = "#EBCBB0")
+    }
+    val engSub = when {
+      isMed -> Subject(userId = targetUserId, name = "Clinical Evidence & Biostats", code = "MED240", colorHex = "#E9F4EE")
+      isEng -> Subject(userId = targetUserId, name = "Computer-Aided Design (CAD)", code = "ME115", colorHex = "#E9F4EE")
+      else -> Subject(userId = targetUserId, name = "Software Engineering Principles", code = "CS310", colorHex = "#E9F4EE")
+    }
 
     val csId = dao.insertSubject(csSub)
     val mathId = dao.insertSubject(mathSub)
@@ -403,40 +588,43 @@ class StudyPilotRepository(
     // Sessions
     val sessions = listOf(
       TimetableSession(
+        userId = targetUserId,
         subjectId = csId,
-        subjectName = "Data Structures & Algorithms",
-        topic = "Binary Search Trees & AVL Rotations",
+        subjectName = csSub.name,
+        topic = if (isMed) "Cardiovascular & Respiratory Mechanisms" else if (isEng) "First Law of Thermodynamics & Heat Cycles" else "Binary Search Trees & AVL Rotations",
         date = today,
         startTime = "09:00",
         endTime = "10:30",
-        location = "Hall C, Turing Building",
-        notes = "Bring laptop for live tree balancing exercise.",
+        location = if (isMed) "Medical School Lecture Hall A" else if (isEng) "Engineering Lab 3" else "Hall C, Turing Building",
+        notes = "Bring lecture notes and review slides.",
         recurringDays = "Mon,Wed,Fri",
         reminderMinutes = 15,
         status = "SCHEDULED"
       ),
       TimetableSession(
+        userId = targetUserId,
         subjectId = mathId,
-        subjectName = "Linear Algebra & Calculus",
-        topic = "Eigenvalues & Eigenvector Transformations",
+        subjectName = mathSub.name,
+        topic = if (isMed) "Enzyme Kinetics & Cellular Respiration" else if (isEng) "Stress-Strain Tensors & Hooke's Law" else "Eigenvalues & Eigenvector Transformations",
         date = today,
         startTime = "11:00",
         endTime = "12:30",
         location = "Lecture Theatre 2",
-        notes = "Review Matrix diagonalization theorem.",
+        notes = "Weekly assignment problem sets.",
         recurringDays = "Tue,Thu",
         reminderMinutes = 30,
         status = "SCHEDULED"
       ),
       TimetableSession(
+        userId = targetUserId,
         subjectId = physId,
-        subjectName = "Classical & Quantum Physics",
-        topic = "Wave-Particle Duality & Schrödinger Eq",
+        subjectName = physSub.name,
+        topic = if (isMed) "Receptor Agonists & Pharmacokinetics" else if (isEng) "PID Control Loops & Transfer Functions" else "Wave-Particle Duality & Schrödinger Eq",
         date = today,
         startTime = "14:00",
         endTime = "15:30",
-        location = "Physics Lab 4",
-        notes = "Laboratory experiment: Double slit interference.",
+        location = "Specialized Research Lab",
+        notes = "Laboratory experiment and group collaboration.",
         recurringDays = "Wed",
         reminderMinutes = 15,
         status = "SCHEDULED"
@@ -546,6 +734,7 @@ class StudyPilotRepository(
 
     dao.insertScheduleFormat(
       com.example.data.model.ScheduleFormat(
+        userId = targetUserId,
         name = "Standard Academic Day",
         description = "Balanced 4-session day: Morning Lectures, Afternoon Lab, Evening Review",
         formatSessionsJson = standardDayJson
@@ -553,6 +742,7 @@ class StudyPilotRepository(
     )
     dao.insertScheduleFormat(
       com.example.data.model.ScheduleFormat(
+        userId = targetUserId,
         name = "Exam Prep Deep Work",
         description = "3 intensive 2-hour revision intervals with active recall & alarms",
         formatSessionsJson = deepWorkJson
@@ -560,6 +750,7 @@ class StudyPilotRepository(
     )
     dao.insertScheduleFormat(
       com.example.data.model.ScheduleFormat(
+        userId = targetUserId,
         name = "Weekend Light Revision",
         description = "2 relaxed study blocks for consolidating concepts and notes",
         formatSessionsJson = lightReviewJson
@@ -569,11 +760,12 @@ class StudyPilotRepository(
     // Topics
     val topics = listOf(
       StudyTopic(
+        userId = targetUserId,
         subjectId = csId,
-        subjectName = "Data Structures & Algorithms",
-        title = "AVL Tree Rotations & Self-Balancing",
+        subjectName = csSub.name,
+        title = if (isMed) "Cardiovascular Pressure & Heart Dynamics" else if (isEng) "Carnot Cycle & Entropy Variations" else "AVL Tree Rotations & Self-Balancing",
         dateStudied = today,
-        descriptionNotes = "Self-balancing binary search trees maintain O(log n) height using Left-Left, Right-Right, Left-Right, and Right-Left rotations when balance factor exceeds +/-1.",
+        descriptionNotes = if (isMed) "Systemic vascular resistance, Frank-Starling law, and arterial blood pressure regulation." else if (isEng) "Reversible thermodynamic processes, isentropic expansions, and maximum theoretical engine efficiency." else "Self-balancing binary search trees maintain O(log n) height using Left-Left, Right-Right, Left-Right, and Right-Left rotations when balance factor exceeds +/-1.",
         sourceType = "MANUAL",
         masteryLevel = "FAMILIAR",
         repetitionIntervalDays = 3,
@@ -583,26 +775,12 @@ class StudyPilotRepository(
         lastTestedDate = today
       ),
       StudyTopic(
-        subjectId = csId,
-        subjectName = "Data Structures & Algorithms",
-        title = "Dijkstra's Shortest Path Algorithm",
-        dateStudied = today,
-        descriptionNotes = "Greedy graph algorithm finding single-source shortest path with non-negative edge weights using Min-Heap priority queue in O((V + E) log V) time.",
-        sourceType = "UPLOAD",
-        uploadedFileName = "dijkstra_lecture_slides.pdf",
-        masteryLevel = "STRUGGLING",
-        repetitionIntervalDays = 1,
-        nextRevisionDate = today,
-        timesTested = 3,
-        timesCorrect = 1,
-        lastTestedDate = today
-      ),
-      StudyTopic(
+        userId = targetUserId,
         subjectId = mathId,
-        subjectName = "Linear Algebra & Calculus",
-        title = "Eigenvalues and Characteristic Equations",
+        subjectName = mathSub.name,
+        title = if (isMed) "Glycolysis & Citric Acid Cycle Pathways" else if (isEng) "Mohr's Circle & Principal Stress Analysis" else "Eigenvalues and Characteristic Equations",
         dateStudied = today,
-        descriptionNotes = "Roots of det(A - lambda*I) = 0 give the eigenvalues. Geometric multiplicity versus algebraic multiplicity determines matrix diagonalizability.",
+        descriptionNotes = if (isMed) "Glucose oxidation, pyruvate conversion, electron transport chain ATP yield." else if (isEng) "2D state of stress transformations, shear stress maxima, and failure criteria." else "Roots of det(A - lambda*I) = 0 give the eigenvalues. Geometric multiplicity versus algebraic multiplicity determines matrix diagonalizability.",
         sourceType = "PASTED",
         masteryLevel = "UNTESTED",
         repetitionIntervalDays = 1,
@@ -612,11 +790,12 @@ class StudyPilotRepository(
         lastTestedDate = null
       ),
       StudyTopic(
+        userId = targetUserId,
         subjectId = physId,
-        subjectName = "Classical & Quantum Physics",
-        title = "Conservation of Angular Momentum",
+        subjectName = physSub.name,
+        title = if (isMed) "Pharmacodynamics & Dose-Response Curves" else if (isEng) "Second-Order System Damping & Frequency Response" else "Conservation of Angular Momentum",
         dateStudied = today,
-        descriptionNotes = "When net external torque on a system is zero, total angular momentum L = I*omega remains constant throughout motion.",
+        descriptionNotes = if (isMed) "EC50, efficacy vs potency, competitive vs noncompetitive antagonists." else if (isEng) "Underdamped vs critically damped systems, natural frequency, Bode gain and phase margin." else "When net external torque on a system is zero, total angular momentum L = I*omega remains constant throughout motion.",
         sourceType = "MANUAL",
         masteryLevel = "MASTERED",
         repetitionIntervalDays = 14,
@@ -626,11 +805,12 @@ class StudyPilotRepository(
         lastTestedDate = today
       ),
       StudyTopic(
+        userId = targetUserId,
         subjectId = engId,
-        subjectName = "Software Engineering Principles",
-        title = "SOLID Architecture Principles",
+        subjectName = engSub.name,
+        title = if (isMed) "Clinical Trial Protocols & Ethics" else if (isEng) "Finite Element Method & Solid Mechanics" else "SOLID Architecture Principles",
         dateStudied = today,
-        descriptionNotes = "Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, and Dependency Inversion. Foundation of clean decoupled architecture.",
+        descriptionNotes = if (isMed) "Double-blind randomized controlled trials, placebo controls, informed consent." else if (isEng) "Mesh discretization, stiffness matrix formulation, boundary condition solving." else "Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, and Dependency Inversion. Foundation of clean decoupled architecture.",
         sourceType = "MANUAL",
         masteryLevel = "FAMILIAR",
         repetitionIntervalDays = 7,
@@ -730,22 +910,25 @@ class StudyPilotRepository(
 
     val tasks = listOf(
       StudyTask(
-        subjectName = "Data Structures & Algorithms",
-        title = "Midterm Examination (Sorting & Trees)",
+        userId = targetUserId,
+        subjectName = csSub.name,
+        title = if (isMed) "Clinical Anatomy Midterm Examination" else if (isEng) "Thermodynamic Heat Cycles Exam" else "Midterm Examination (Sorting & Trees)",
         dueDate = examDate,
         type = "EXAM",
         priority = "HIGH"
       ),
       StudyTask(
-        subjectName = "Linear Algebra & Calculus",
-        title = "Problem Set 4: Vector Spaces & Inner Products",
+        userId = targetUserId,
+        subjectName = mathSub.name,
+        title = if (isMed) "Problem Set 4: Cellular Respiration Pathway" else if (isEng) "Problem Set 4: Stress-Strain Tensor" else "Problem Set 4: Vector Spaces & Inner Products",
         dueDate = assignDate,
         type = "ASSIGNMENT",
         priority = "MEDIUM"
       ),
       StudyTask(
-        subjectName = "Software Engineering Principles",
-        title = "System Design & UML Class Diagram Submission",
+        userId = targetUserId,
+        subjectName = engSub.name,
+        title = if (isMed) "Clinical Case Study & Diagnostic Report" else if (isEng) "CAD Model & Assembly Drawing Submission" else "System Design & UML Class Diagram Submission",
         dueDate = assignDate,
         type = "ASSIGNMENT",
         priority = "LOW"
@@ -757,13 +940,14 @@ class StudyPilotRepository(
     val now = System.currentTimeMillis()
     val hour = 3600_000L
 
-    // 1. Data Structures & Algorithms Tutor Session
+    // 1. First Tutor Session
     val session1Id = dao.insertTutorSession(
       TutorSession(
+        userId = targetUserId,
         subjectId = csId,
-        subjectName = "Data Structures & Algorithms",
-        title = "AVL Tree Left-Right (LR) Rotation Implementation",
-        previewSnippet = "An LR rotation is performed when a node is inserted into the right subtree of the left child. We first rotate left on the child, then right on the root.",
+        subjectName = csSub.name,
+        title = if (isMed) "Cardiovascular Pressure & Dynamics Review" else if (isEng) "First Law of Thermodynamics & Heat Cycles" else "AVL Tree Left-Right (LR) Rotation Implementation",
+        previewSnippet = if (isMed) "Systemic vascular resistance and arterial regulation." else if (isEng) "State transformations and entropy equations." else "An LR rotation is performed when a node is inserted into the right subtree of the left child.",
         modelUsed = "gemini-3.5-flash",
         searchGroundingUsed = false,
         messageCount = 2,
@@ -814,13 +998,14 @@ fun rotateLeftRight(node: AvlNode): AvlNode {
       )
     )
 
-    // 2. Linear Algebra Tutor Session
+    // 2. Second Tutor Session
     val session2Id = dao.insertTutorSession(
       TutorSession(
+        userId = targetUserId,
         subjectId = mathId,
-        subjectName = "Linear Algebra & Calculus",
-        title = "Matrix Diagonalization & Eigenvalue Criterion",
-        previewSnippet = "An n x n matrix A is diagonalizable if and only if it has n linearly independent eigenvectors, meaning geometric multiplicity equals algebraic multiplicity.",
+        subjectName = mathSub.name,
+        title = if (isMed) "Cellular Genetics & Respiration Pathway" else if (isEng) "Materials Science & Statics Equations" else "Matrix Diagonalization & Eigenvalue Criterion",
+        previewSnippet = if (isMed) "ATP production and biochemical enzymatic control." else if (isEng) "Mohr's circle and principal stresses." else "An n x n matrix A is diagonalizable if and only if it has n linearly independent eigenvectors.",
         modelUsed = "gemini-3.1-pro-preview",
         searchGroundingUsed = false,
         messageCount = 2,
@@ -870,13 +1055,14 @@ where D is a diagonal matrix containing the eigenvalues λ₁, ..., λₙ.
       )
     )
 
-    // 3. Physics Session with Search Grounding
+    // 3. Third Tutor Session with Search Grounding
     val session3Id = dao.insertTutorSession(
       TutorSession(
+        userId = targetUserId,
         subjectId = physId,
-        subjectName = "Classical & Quantum Physics",
-        title = "Wave-Particle Duality & Davisson-Germer Experiment",
-        previewSnippet = "De Broglie proposed lambda = h / p. Verified experimentally by Davisson & Germer through electron diffraction through nickel crystal lattice.",
+        subjectName = physSub.name,
+        title = if (isMed) "Medical Pharmacology Drug Mechanisms" else if (isEng) "Robotics Transfer Functions & PID Loops" else "Wave-Particle Duality & Davisson-Germer Experiment",
+        previewSnippet = if (isMed) "Receptor-ligand binding and pharmacodynamics." else if (isEng) "Proportional-Integral-Derivative error tuning." else "De Broglie proposed lambda = h / p. Verified experimentally by Davisson & Germer through electron diffraction through nickel crystal lattice.",
         modelUsed = "gemini-3.5-flash",
         searchGroundingUsed = true,
         messageCount = 2,
@@ -923,6 +1109,7 @@ Clinton Davisson and Lester Germer fired slow-moving electrons at a crystalline 
     // 4. General Academic Session
     val session4Id = dao.insertTutorSession(
       TutorSession(
+        userId = targetUserId,
         subjectId = null,
         subjectName = "General",
         title = "Active Recall & Spaced Repetition Scheduling",

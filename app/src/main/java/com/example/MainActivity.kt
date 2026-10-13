@@ -43,12 +43,15 @@ import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -230,9 +233,15 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.3).sp
               ),
-              color = MaterialTheme.colorScheme.onSurface
+              color = MaterialTheme.colorScheme.onSurface,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
             )
           },
+          colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface
+          ),
           navigationIcon = {
             if (isSubScreen) {
               IconButton(onClick = { viewModel.navigateTo(Screen.Dashboard) }) {
@@ -250,18 +259,17 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
               onClick = { viewModel.navigateTo(Screen.AiTutor) }
             ) {
               Box(
-                modifier = if (currentScreen == Screen.AiTutor) {
-                  Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                } else Modifier,
+                modifier = Modifier
+                  .size(36.dp)
+                  .clip(CircleShape)
+                  .background(if (currentScreen == Screen.AiTutor) MaterialTheme.colorScheme.primaryContainer else Color.Transparent),
                 contentAlignment = Alignment.Center
               ) {
                 Icon(
                   imageVector = Icons.Default.Psychology,
                   contentDescription = "AI Tutor",
-                  tint = if (currentScreen == Screen.AiTutor) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                  tint = if (currentScreen == Screen.AiTutor) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier.size(20.dp)
                 )
               }
             }
@@ -270,12 +278,10 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
               onClick = { viewModel.navigateTo(Screen.Tasks) }
             ) {
               Box(
-                modifier = if (currentScreen == Screen.Tasks) {
-                  Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                } else Modifier,
+                modifier = Modifier
+                  .size(36.dp)
+                  .clip(CircleShape)
+                  .background(if (currentScreen == Screen.Tasks) MaterialTheme.colorScheme.primaryContainer else Color.Transparent),
                 contentAlignment = Alignment.Center
               ) {
                 if (pendingTaskCount > 0 && currentScreen != Screen.Tasks) {
@@ -292,62 +298,41 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
                     Icon(
                       imageVector = Icons.AutoMirrored.Filled.Assignment,
                       contentDescription = "Tasks",
-                      tint = MaterialTheme.colorScheme.onSurfaceVariant
+                      tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                      modifier = Modifier.size(20.dp)
                     )
                   }
                 } else {
                   Icon(
                     imageVector = Icons.AutoMirrored.Filled.Assignment,
                     contentDescription = "Tasks",
-                    tint = if (currentScreen == Screen.Tasks) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = if (currentScreen == Screen.Tasks) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
                   )
                 }
               }
             }
 
-            IconButton(
-              onClick = { viewModel.navigateTo(Screen.Settings) }
-            ) {
-              Box(
-                modifier = if (currentScreen == Screen.Settings) {
-                  Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                } else Modifier,
-                contentAlignment = Alignment.Center
-              ) {
-                Icon(
-                  imageVector = Icons.Default.Settings,
-                  contentDescription = "Settings",
-                  tint = if (currentScreen == Screen.Settings) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-              }
-            }
-
-            // Academic User Profile Avatar Button
+            // Academic User Profile Avatar Button (Navigates to Profile, Settings & Account)
             IconButton(
               onClick = { viewModel.navigateTo(Screen.Settings) }
             ) {
               Box(
                 modifier = Modifier
-                  .size(32.dp)
+                  .size(36.dp)
                   .clip(CircleShape)
-                  .background(com.example.ui.theme.PaletteDeepSage),
+                  .background(if (currentScreen == Screen.Settings) MaterialTheme.colorScheme.primaryContainer else com.example.ui.theme.PaletteDeepSage),
                 contentAlignment = Alignment.Center
               ) {
                 Text(
                   text = currentUser.avatarInitials,
                   fontWeight = FontWeight.ExtraBold,
-                  color = com.example.ui.theme.PaletteCreamIvory,
-                  fontSize = 11.sp
+                  color = if (currentScreen == Screen.Settings) MaterialTheme.colorScheme.primary else com.example.ui.theme.PaletteCreamIvory,
+                  fontSize = 12.sp
                 )
               }
             }
-          },
-          colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface
-          )
+          }
         )
       }
     },
@@ -393,10 +378,17 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
     Box(
       modifier = Modifier
         .fillMaxSize()
-        .padding(innerPadding)
+        .padding(innerPadding),
+      contentAlignment = Alignment.TopCenter
     ) {
-      when (currentScreen) {
-        Screen.Login -> {
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .widthIn(max = 860.dp),
+        contentAlignment = Alignment.TopCenter
+      ) {
+        when (currentScreen) {
+          Screen.Login -> {
           LoginScreen(
             viewModel = viewModel,
             onLoginSuccess = { viewModel.navigateTo(Screen.Dashboard) }
@@ -449,6 +441,7 @@ fun StudyPilotApp(viewModel: StudyPilotViewModel) {
   }
     }
   }
+}
 
   // Global Active Alarm Ringing Dialog: triggers across the entire app
   ringingAlarmSession?.let { ringingSession ->

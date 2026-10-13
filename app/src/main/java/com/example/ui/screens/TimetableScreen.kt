@@ -285,15 +285,18 @@ fun TimetableScreen(
                     shape = RoundedCornerShape(6.dp),
                     color = PalettePaleCeladon,
                     border = androidx.compose.foundation.BorderStroke(1.dp, PaletteMediumSage),
-                    modifier = Modifier.clickable { shiftSelectedYear(-1) }
+                    modifier = Modifier
+                      .height(28.dp)
+                      .clickable { shiftSelectedYear(-1) }
                   ) {
-                    Text(
-                      text = "-1Y",
-                      fontSize = 11.sp,
-                      fontWeight = FontWeight.Bold,
-                      color = PaletteDarkText,
-                      modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
-                    )
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
+                      Text(
+                        text = "-1Y",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PaletteDarkText
+                      )
+                    }
                   }
                   IconButton(
                     onClick = { shiftSelectedMonth(-1) },
@@ -323,15 +326,18 @@ fun TimetableScreen(
                     Surface(
                       shape = RoundedCornerShape(6.dp),
                       color = PaletteDeepSage,
-                      modifier = Modifier.clickable { selectedDate = realToday }
+                      modifier = Modifier
+                        .height(22.dp)
+                        .clickable { selectedDate = realToday }
                     ) {
-                      Text(
-                        text = "TODAY",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = PaletteCreamIvory,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                      )
+                      Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 6.dp)) {
+                        Text(
+                          text = "TODAY",
+                          fontSize = 9.sp,
+                          fontWeight = FontWeight.ExtraBold,
+                          color = PaletteCreamIvory
+                        )
+                      }
                     }
                   }
                 }
@@ -353,15 +359,18 @@ fun TimetableScreen(
                     shape = RoundedCornerShape(6.dp),
                     color = PalettePaleCeladon,
                     border = androidx.compose.foundation.BorderStroke(1.dp, PaletteMediumSage),
-                    modifier = Modifier.clickable { shiftSelectedYear(1) }
+                    modifier = Modifier
+                      .height(28.dp)
+                      .clickable { shiftSelectedYear(1) }
                   ) {
-                    Text(
-                      text = "+1Y",
-                      fontSize = 11.sp,
-                      fontWeight = FontWeight.Bold,
-                      color = PaletteDarkText,
-                      modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
-                    )
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
+                      Text(
+                        text = "+1Y",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PaletteDarkText
+                      )
+                    }
                   }
                 }
               }
@@ -471,11 +480,10 @@ fun TimetableScreen(
               Spacer(modifier = Modifier.height(8.dp))
 
               // Row C: Rolling 7-Day Window centered on the currently selected date (-3 to +3 days)
-              // Dynamically adapts whether you are viewing today, next month, or next year!
               Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
               ) {
                 IconButton(
                   onClick = { shiftSelectedDate(-1) },
@@ -489,28 +497,28 @@ fun TimetableScreen(
                   )
                 }
 
-                LazyRow(
+                val baseCal = Calendar.getInstance().apply {
+                  try {
+                    time = dateFormat.parse(selectedDate) ?: Date()
+                  } catch (_: Exception) {}
+                }
+
+                val dayPills = (-3..3).map { offset ->
+                  val c = Calendar.getInstance().apply {
+                    time = baseCal.time
+                    add(Calendar.DAY_OF_YEAR, offset)
+                  }
+                  val dStr = dateFormat.format(c.time)
+                  val dayName = SimpleDateFormat("EEE", Locale.getDefault()).format(c.time)
+                  val dayNum = SimpleDateFormat("d", Locale.getDefault()).format(c.time)
+                  Triple(dStr, dayName, dayNum)
+                }
+
+                Row(
                   modifier = Modifier.weight(1f),
-                  horizontalArrangement = Arrangement.spacedBy(6.dp)
+                  horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                  val baseCal = Calendar.getInstance().apply {
-                    try {
-                      time = dateFormat.parse(selectedDate) ?: Date()
-                    } catch (_: Exception) {}
-                  }
-
-                  val dayPills = (-3..3).map { offset ->
-                    val c = Calendar.getInstance().apply {
-                      time = baseCal.time
-                      add(Calendar.DAY_OF_YEAR, offset)
-                    }
-                    val dStr = dateFormat.format(c.time)
-                    val dayName = SimpleDateFormat("EEE", Locale.getDefault()).format(c.time)
-                    val dayNum = SimpleDateFormat("d", Locale.getDefault()).format(c.time)
-                    Triple(dStr, dayName, dayNum)
-                  }
-
-                  items(dayPills) { (dStr, dayName, dayNum) ->
+                  dayPills.forEach { (dStr, dayName, dayNum) ->
                     val isSelected = dStr == selectedDate
                     val isTodayPill = dStr == realToday
                     val sessionCount = sessions.count { it.date == dStr }
@@ -522,33 +530,37 @@ fun TimetableScreen(
                         1.dp,
                         if (isSelected) PaletteDeepSage else PaletteMediumSage
                       ),
-                      modifier = Modifier.clickable { selectedDate = dStr }
+                      modifier = Modifier
+                        .weight(1f)
+                        .clickable { selectedDate = dStr }
                     ) {
                       Column(
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        modifier = Modifier.padding(vertical = 5.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                       ) {
                         Text(
                           text = dayName,
                           fontSize = 10.sp,
                           fontWeight = FontWeight.Bold,
-                          color = if (isSelected) PaletteCreamIvory else PaletteDarkText
+                          color = if (isSelected) PaletteCreamIvory else PaletteDarkText,
+                          maxLines = 1
                         )
                         Text(
                           text = dayNum,
                           fontSize = 13.sp,
                           fontWeight = FontWeight.ExtraBold,
-                          color = if (isSelected) PaletteCreamIvory else PaletteDarkText
+                          color = if (isSelected) PaletteCreamIvory else PaletteDarkText,
+                          maxLines = 1
                         )
                         if (sessionCount > 0) {
                           Box(
                             modifier = Modifier
-                              .size(5.dp)
+                              .size(4.dp)
                               .clip(CircleShape)
                               .background(if (isSelected) PaletteCreamIvory else PaletteDeepSage)
                           )
                         } else {
-                          Spacer(modifier = Modifier.height(5.dp))
+                          Spacer(modifier = Modifier.height(4.dp))
                         }
                       }
                     }

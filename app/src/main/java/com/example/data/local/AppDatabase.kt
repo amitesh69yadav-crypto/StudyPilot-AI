@@ -25,7 +25,7 @@ import com.example.data.model.TutorSession
     TutorMessageEntity::class,
     com.example.data.model.ScheduleFormat::class
   ],
-  version = 4,
+  version = 5,
   exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

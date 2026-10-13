@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // User Profile
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+        request.resource.data.uid == userId &&
+        request.resource.data.name is string &&
+        request.resource.data.email is string;
+      allow update: if isOwner(userId) &&
+        request.resource.data.uid == userId;
+      allow delete: if isOwner(userId);
+
+      // Subjects Subcollection
+      match /subjects/{subjectId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+          request.resource.data.userId == userId &&
+          request.resource.data.name is string;
+        allow update: if isOwner(userId) &&
+          request.resource.data.userId == userId;
+        allow delete: if isOwner(userId);
+      }
+
+      // Sessions Subcollection
+      match /sessions/{sessionId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+          request.resource.data.userId == userId &&
+          request.resource.data.date is string &&
+          request.resource.data.startTime is string;
+        allow update: if isOwner(userId) &&
+          request.resource.data.userId == userId;
+        allow delete: if isOwner(userId);
+      }
+
+      // Topics Subcollection
+      match /topics/{topicId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+          request.resource.data.userId == userId &&
+          request.resource.data.title is string;
+        allow update: if isOwner(userId) &&
+          request.resource.data.userId == userId;
+        allow delete: if isOwner(userId);
+      }
+
+      // Tasks Subcollection
+      match /tasks/{taskId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+          request.resource.data.userId == userId &&
+          request.resource.data.title is string;
+        allow update: if isOwner(userId) &&
+          request.resource.data.userId == userId;
+        allow delete: if isOwner(userId);
+      }
+
+      // Quiz Attempts Subcollection
+      match /quizAttempts/{attemptId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+          request.resource.data.userId == userId;
+        allow update: if isOwner(userId) &&
+          request.resource.data.userId == userId;
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

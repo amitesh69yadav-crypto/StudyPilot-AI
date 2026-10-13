@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "subjects")
 data class Subject(
   @PrimaryKey(autoGenerate = true) val id: Long = 0,
+  val userId: String = "",
   val name: String,
   val code: String,
   val colorHex: String,
@@ -15,6 +16,7 @@ data class Subject(
 @Entity(tableName = "timetable_sessions")
 data class TimetableSession(
   @PrimaryKey(autoGenerate = true) val id: Long = 0,
+  val userId: String = "",
   val subjectId: Long,
   val subjectName: String,
   val topic: String,
@@ -33,6 +35,7 @@ data class TimetableSession(
 @Entity(tableName = "study_topics")
 data class StudyTopic(
   @PrimaryKey(autoGenerate = true) val id: Long = 0,
+  val userId: String = "",
   val subjectId: Long,
   val subjectName: String,
   val title: String,
@@ -67,6 +70,7 @@ data class QuizQuestion(
 @Entity(tableName = "quiz_attempts")
 data class QuizAttempt(
   @PrimaryKey(autoGenerate = true) val id: Long = 0,
+  val userId: String = "",
   val title: String,
   val dateAttempted: String, // "YYYY-MM-DD HH:mm"
   val totalQuestions: Int,
@@ -80,6 +84,7 @@ data class QuizAttempt(
 @Entity(tableName = "study_tasks")
 data class StudyTask(
   @PrimaryKey(autoGenerate = true) val id: Long = 0,
+  val userId: String = "",
   val subjectName: String,
   val title: String,
   val dueDate: String, // "YYYY-MM-DD"
@@ -100,6 +105,7 @@ data class QuizConfig(
 @Entity(tableName = "tutor_sessions")
 data class TutorSession(
   @PrimaryKey(autoGenerate = true) val id: Long = 0,
+  val userId: String = "",
   val subjectId: Long? = null,
   val subjectName: String = "General",
   val title: String,
@@ -128,6 +134,7 @@ data class TutorMessageEntity(
 @Entity(tableName = "schedule_formats")
 data class ScheduleFormat(
   @PrimaryKey(autoGenerate = true) val id: Long = 0,
+  val userId: String = "",
   val name: String,
   val description: String = "",
   val formatSessionsJson: String = "[]", // List of SessionTemplate items serialized to JSON

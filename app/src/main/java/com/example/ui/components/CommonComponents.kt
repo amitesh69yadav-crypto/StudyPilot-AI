@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -119,7 +120,7 @@ fun StatCard(
   modifier: Modifier = Modifier
 ) {
   Card(
-    modifier = modifier.height(96.dp),
+    modifier = modifier.defaultMinSize(minHeight = 92.dp),
     shape = RoundedCornerShape(16.dp),
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surface

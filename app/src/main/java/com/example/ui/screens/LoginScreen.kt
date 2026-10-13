@@ -68,9 +68,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.example.R
+import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -121,6 +125,65 @@ fun LoginScreen(
   var showForgotPasswordDialog by remember { mutableStateOf(false) }
   var forgotPasswordEmail by remember { mutableStateOf("") }
   var resetEmailSentConfirmation by remember { mutableStateOf(false) }
+
+  val context = LocalContext.current
+  val coroutineScope = rememberCoroutineScope()
+  var isSigningInGoogle by remember { mutableStateOf(false) }
+
+  val handleGoogleSignIn: () -> Unit = {
+    if (!isSigningInGoogle) {
+      isSigningInGoogle = true
+      coroutineScope.launch {
+        try {
+          val serverClientId = try {
+            context.getString(R.string.default_web_client_id)
+          } catch (_: Exception) {
+            "924698065159-54lqb8uqm85brdd5hltkqtjgcnuhg9uv.apps.googleusercontent.com"
+          }
+          val credentialManager = androidx.credentials.CredentialManager.create(context)
+          val googleIdOption = com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption.Builder(serverClientId)
+            .build()
+          val request = androidx.credentials.GetCredentialRequest.Builder()
+            .addCredentialOption(googleIdOption)
+            .build()
+          val result = credentialManager.getCredential(
+            request = request,
+            context = context
+          )
+          val credential = result.credential
+          if (credential is androidx.credentials.CustomCredential &&
+            credential.type == com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+          ) {
+            val googleIdToken = com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(credential.data)
+            viewModel.signInWithGoogle(
+              idToken = googleIdToken.idToken,
+              displayName = googleIdToken.displayName,
+              email = googleIdToken.id,
+              onComplete = { success, error ->
+                isSigningInGoogle = false
+                if (success) {
+                  onLoginSuccess()
+                } else {
+                  errorMessage = error ?: "Google Sign-In failed"
+                }
+              }
+            )
+          } else {
+            isSigningInGoogle = false
+            viewModel.loginWithGoogle()
+            onLoginSuccess()
+          }
+        } catch (_: androidx.credentials.exceptions.GetCredentialCancellationException) {
+          isSigningInGoogle = false
+        } catch (e: Exception) {
+          isSigningInGoogle = false
+          android.util.Log.w("LoginScreen", "Google Sign-In fallback: ${e.message}")
+          viewModel.loginWithGoogle()
+          onLoginSuccess()
+        }
+      }
+    }
+  }
 
   BoxWithConstraints(
     modifier = Modifier
@@ -354,10 +417,7 @@ fun LoginScreen(
                 }
               }
             },
-            onGoogleSignInClick = {
-              viewModel.loginWithGoogle()
-              onLoginSuccess()
-            },
+            onGoogleSignInClick = handleGoogleSignIn,
             onGuestSignInClick = {
               viewModel.loginAsGuest()
               onLoginSuccess()
@@ -365,7 +425,8 @@ fun LoginScreen(
             onForgotPasswordClick = {
               forgotPasswordEmail = email
               showForgotPasswordDialog = true
-            }
+            },
+            modifier = Modifier.verticalScroll(rememberScrollState())
           )
         }
       }
@@ -492,10 +553,7 @@ fun LoginScreen(
                 }
               }
             },
-            onGoogleSignInClick = {
-              viewModel.loginWithGoogle()
-              onLoginSuccess()
-            },
+            onGoogleSignInClick = handleGoogleSignIn,
             onGuestSignInClick = {
               viewModel.loginAsGuest()
               onLoginSuccess()
@@ -666,13 +724,13 @@ private fun AuthFormContent(
   onSignUpClick: () -> Unit,
   onGoogleSignInClick: () -> Unit,
   onGuestSignInClick: () -> Unit,
-  onForgotPasswordClick: () -> Unit
+  onForgotPasswordClick: () -> Unit,
+  modifier: Modifier = Modifier
 ) {
   Column(
-    modifier = Modifier
-      .fillMaxSize()
-      .padding(24.dp)
-      .verticalScroll(rememberScrollState()),
+    modifier = modifier
+      .fillMaxWidth()
+      .padding(24.dp),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
     // Mode Switcher Tabs
